@@ -1,0 +1,19 @@
+{
+  "name": "语境词块本 · 不背单词也能学英语",
+  "short_name": "词块本",
+  "description": "在真实句子里收集词块，按间隔复习；内置朗读、填空、理解题，并能按你的等级与进度生成复习短文。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#f4f8f6",
+  "theme_color": "#2f9e6e",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,22 @@
+# —— 项目文件之外的东西，别一起提交 ——
+
+# 本机调试遗留（DSH / asar 分析等）
+_*.js
+_*.md
+_*.json
+*.bat
+
+# 临时截图与草稿
+pasted-screenshot.jpg
+cat_doodle.py
+cat-doodle.svg
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 导出备份（含个人学习数据，不要提交）
+词块本-*.json
+词块本-*.csv
+词块本-Anki-*.txt

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语境词块本</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#f4f8f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111915" media="(prefers-color-scheme: dark)">
+<!--
+  这是一个「入口跳转页」：应用本体在 ec-chunks-fixed.html。
+  之所以不把应用内容直接改名成 index.html，是因为它已经是完整可用的单文件，
+  重命名只需一步（见 README「可选：改名为 index.html」），而 manifest / sw.js 都按相对路径写，不受影响。
+-->
+<script>location.replace('./ec-chunks-fixed.html');</script>
+</head>
+<body style="margin:0;background:#f4f8f6;color:#1d2b26;font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;">
+  <noscript>
+    <p style="padding:28px;font-size:15px;line-height:1.8;">
+      语境词块本需要 JavaScript 才能运行。<br>
+      <a href="./ec-chunks-fixed.html">点这里打开应用</a>
+    </p>
+  </noscript>
+  <p style="padding:28px;font-size:14px;color:#6a7b74;">正在打开语境词块本…</p>
+</body>
+</html>
