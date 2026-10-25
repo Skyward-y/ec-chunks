@@ -2,6 +2,7 @@
 
 ## 0.6 — 错题本、AI 辅助与全站框选
 
+- **打包加了一条手工路径**：受限沙箱里 electron-builder 起子进程会 `spawn EPERM`（管道 stdio 被禁），所以新增 `tools/repack-unpacked.js`（`npm run repack:dir`）在进程内重打 `app.asar`；`build.files` 也从 `*.html` / `*.js` 通配收紧成显式清单——通配会把 `eslint.config.js` 这类开发脚本一起打进包里，同时加了一条测试守着「清单与重打脚本一致」，少一个文件就是装完打开白页
 - **填空可以一题一题对答案**：以前只有卡片头一颗「检查答案」，一点就把全部题的答案摊开、错处与正确答案一起铺满整块。现在每题下面都有「看这题答案」，只判这一题、只展开这一题的正确答案与句意，判过之后按钮变成「再判一次」；卡片头那颗改名「全部检查」，只统计真的填了的题——空着的既不判也不展开，免得没做的题被算成错题。逐题与整卷共用同一个 `judgeCloze(i)`，判错记错题、判对自动订正这两条规则不会分叉
 - **错题本可以清空已订正的**：积了一堆已订正条目时只能一条条点掉，现在筛选行尾有「清空已订正」（确认一次，只清 `fixed` 的条目，待订正的不受影响）。清掉的同时写墓碑 `state.deletedMistakes`——云同步是按并集合并的，没有墓碑的话下次同步会把清掉的条目原样搬回来（和 `deletedLessons` 同一个道理）；同一道题后来又答错时 `recordMistake()` 会把墓碑撤掉，否则新记的错会被自己藏住
 - **问 AI 的站点可以换**：以前「让 AI 讲讲」固定打开 chat.deepseek.com，现在统计页有「问 AI 用哪个站点」卡片：DeepSeek / ChatGPT / Kimi / 豆包 / 元宝 五个预设，也能自己填网址（只认 `http://` 或 `https://` 开头的，不合法就不保存并给提示）。仍然只是把提示词复制到剪贴板再打开网页，本地不存任何 API Key；选过的站点记在 `state.settings.aiUrl`，下次还用同一个
@@ -27,7 +28,7 @@
 - **云同步不再整盘覆盖**：上行/下行都改成按并集合并（词块按 id 取更熟的那条、日志按天取并、进度与译文按题合并、删除用 `state.trash` / `state.deletedLessons` 当墓碑），「从云端恢复」变成「从云端合并」，本机独有的数据不会被抹掉
 - **判新旧不再看本机时钟**：以前拿远端 `updated_at` 和本机 `lastSyncAt` 比大小，两台设备的钟差几分钟就会判错。现在同步成功时存一个内容指纹（`cloudCfg.lastHash`），谁和指纹不同谁就是改过的一边；两边都改过就直接合并并回传。合并结果里不留 `undefined` 字段（`JSON.stringify` 会丢掉这种键，导致每次启动重算的指纹都和存下来的对不上，白同步一次）
 - **同步失败不再静默**：`setCloudError()` 把原因写进 `cloudCfg.lastError`，设置卡片里显示「上次同步失败：…」，不再 `catch(e){}` 吞掉
-- **新增 `npm test`**：`tools/smoke.js` 把 `app.js` 放进 DOM 桩里跑，覆盖迁移、进度持久化、改动层、云同步合并、端口可见性、CSP 与脚本边界、落盘合并、缓存版本、语法解读、全站框选、译文缓存、错题回原文、AI 追问、解析不重复、句子级 AI 讲解、单句译文开关、填空逐题判定、错题清理墓碑、AI 站点切换等 48 条约束，不需要装任何依赖
+- **新增 `npm test`**：`tools/smoke.js` 把 `app.js` 放进 DOM 桩里跑，覆盖迁移、进度持久化、改动层、云同步合并、端口可见性、CSP 与脚本边界、落盘合并、缓存版本、语法解读、全站框选、译文缓存、错题回原文、AI 追问、解析不重复、句子级 AI 讲解、单句译文开关、填空逐题判定、错题清理墓碑、AI 站点切换、asar 清单对齐等 49 条约束，不需要装任何依赖
 - **新增 `npm run lint` / `npm run lint:html` / `npm run format`**：`eslint.config.js`（扁平配置，只开会出 bug 的规则）+ `.prettierrc.json` + `.editorconfig`；`npm run lint` 检 `electron/`、`tools/`、`sw.js` 与页面脚本，`lint:html` 则是「页面守则」——断言两个 HTML 里没有内联 `<script>`、没有 `on*` 事件属性、有 CSP 且 `script-src` 不含 `unsafe-inline`。存量代码当前 0 error 0 warning
 - **页面脚本从前端拆成独立文件 + 正版 CSP**：`ec-chunks-fixed.html` 里那个 2900 行的内联 `<script>` 拆到 `app.js`，SW 注册抽成 `pwa.js`，入口页跳转抽成 `redirect.js`，两个页面都加了 CSP（`script-src 'self'`，`style-src` 保留 `unsafe-inline` 因为还有几十处内联 style 属性）。原先那三处 `onclick`/`onkeydown` 换成 `data-*` + 事件委托——不是洁癖：CSP 一上线内联事件会整片失效，而且浏览器不报错，卡片就是"点了没反应"
 - **落盘合并，连点不再卡主线程**：`saveState()` 原来每次都整盘 `JSON.stringify(state)` 同步写 localStorage，复习时连点「记住了」一秒十几次，笔记越大越顿。现在改成距上次落盘超过 250ms 就立刻写（常规操作仍是即时可见），窗口内的连续改动合并成一次尾写，切后台/关窗口/离开页面时 `flushSave()` 补最后一下

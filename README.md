@@ -188,6 +188,7 @@ create policy "own update" on public.states for update using (auth.uid() = user_
 ├── tools/
 │   ├── build-installer.js  #   一条命令产出安装包
 │   ├── update-app.js       #   把网页打进 app.asar
+│   ├── repack-unpacked.js  #   只重打 dist/win-unpacked 里的 app.asar（沙箱里 electron-builder 起不来时用）
 │   ├── stamp-sw.js         #   按资源内容重算 sw.js 的缓存版本号（打包时自动跑）
 │   ├── smoke.js            #   npm test：把 app.js 放进 DOM 桩里跑的冒烟测试
 │   ├── lint-html.js        #   npm run lint:html：检查页面无内联脚本 / 有 CSP

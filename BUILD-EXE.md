@@ -71,6 +71,31 @@ NSIS 路线的遗留物（`tools/patch-nsis.js`、`electron/installer.nsi`，以
 
 打包前 `dist:dir` 会自动跑 `node tools/stamp-sw.js`，按静态资源内容重算 `sw.js` 里的 `CACHE_VERSION`（手写必然忘记 bump，老用户会卡在旧缓存上）。想单独检查是否过期：`node tools/stamp-sw.js --check`。
 
+## 在受限沙箱里手工打包（`npm run dist` 起不来时）
+
+在 DSH 的 `workspace-write` 沙箱里跑 `npm run dist`，会失败在 electron-builder 这一步：
+
+```
+Cannot spawn ...app-builder-bin\win\x64\app-builder.exe: Error: spawn EPERM
+```
+
+不是文件权限（直接执行那个 exe 能正常打印版本号），而是沙箱禁止用**管道 stdio** 起子进程：
+`execFileSync(cmd, args, { stdio: 'pipe' })` 必然 EPERM，`{ stdio: 'inherit' }` 正常。
+electron-builder 内部要抓子进程输出，绕不过去，于是改成手工三步，产物与 `npm run dist` 一致：
+
+```bash
+node tools/repack-unpacked.js            # 1) 重打 dist/win-unpacked/resources/app.asar（进程内打包，不起子进程）
+tools/inno-setup/ISCC.exe electron/installer.iss   # 2) 编译安装包：从 shell 直接调，不经 node spawn
+node tools/build-portable.js             # 3) 免安装 zip（脚本本来就用 stdio:'inherit'）
+```
+
+手工重打 asar 的文件清单必须和 `package.json` 的 `build.files` 对齐（`tools/repack-unpacked.js` 已经对齐），
+少一个就是「装完打开白页」。ISCC 编译约 2.5 分钟，别用默认 2 分钟的超时去掐它。
+
+**GUI 回归没法在沙箱里做**：打包出来的 `EcChunks.exe` 在这里一律 `rc=3` 且没有任何日志
+（Chromium 启动要开命名管道，沙箱同样禁止），环境里若带 `ELECTRON_RUN_AS_NODE=1` 它还会被当成 node 跑
+（`--version` 会打印 node 的版本号）。「双击能开、页面能点」必须由人在沙箱外过一遍。
+
 ## 首次运行的两个坑（已在 main.js 里处理）
 
 1. **Windows 11 build 26000+ 上 Chromium 崩溃**（`STATUS_BREAKPOINT 0x80000003`），表现为双击没反应。

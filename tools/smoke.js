@@ -851,5 +851,30 @@ test('免安装 zip 由脚本生成，不再手工打包', () => {
   assert(/build-portable\.js/.test(pkg.scripts.dist), 'npm run dist 应顺带产出免安装 zip');
 });
 
+
+test('手工重打 app.asar 的文件清单与 build.files 对齐', () => {
+  const script = fs.readFileSync(path.join(ROOT, 'tools', 'repack-unpacked.js'), 'utf8');
+  const m = script.match(/const ITEMS = \[([\s\S]*?)\];/);
+  assert.ok(m, 'repack-unpacked.js 里要有 ITEMS 清单');
+  const items = (m[1].match(/'[^']+'/g) || []).map((s) => s.slice(1, -1));
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const files = pkg.build.files;
+  for (const f of files) {
+    if (f === 'electron/**/*') {
+      assert.ok(items.includes('electron'), 'electron/ 必须一起打进 asar');
+      continue;
+    }
+    if (f.includes('*')) {
+      // '*.html' / '*.js' 这类通配：仓库根目录下命中的真实文件都要在 ITEMS 里
+      const re = new RegExp('^' + f.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+      const hit = fs.readdirSync(ROOT).filter((n) => re.test(n));
+      assert.ok(hit.length > 0, f + ' 应该能命中真实文件');
+      for (const n of hit) assert.ok(items.includes(n), 'ITEMS 里缺 ' + n + '，装完会白页');
+      continue;
+    }
+    assert.ok(items.includes(f), 'ITEMS 里缺 ' + f);
+  }
+});
+
 console.log('\n' + passed + ' 个用例通过' + (process.exitCode ? '，有失败' : ''));
 process.exit(process.exitCode || 0);
