@@ -5,15 +5,16 @@
 | 文件 | 大小 | 用途 |
 | --- | --- | --- |
 | `dist/EcChunks-0.5.0-setup.exe` | 107 MB | **正式安装包**，双击安装，装完桌面 / 开始菜单有「语境词块本」 |
-| `dist/win-unpacked/` | 310 MB | 免安装目录（安装包就是它的压缩），可直接运行 `EcChunks.exe` |
-| `dist/EcChunks/` | 358 MB | 早期手工便携版（保留备用） |
+| `dist/EcChunks-v0.5.0-win64.zip` | 126 MB | **免安装版**，解压后双击里面的 `EcChunks.exe` 直接用 |
+
+`dist/win-unpacked/`（约 310 MB）是打包**中间产物**，`npm run dist:dir` 会重新生成，随时可以删。
 
 安装包行为：
 
 - 默认**只为当前用户安装**（`PrivilegesRequired=lowest`），落在 `%LOCALAPPDATA%\Programs\EcChunks`，**不需要管理员权限**。
 - 装完自动建**桌面快捷方式**和**开始菜单项**，名字都是「语境词块本」。
 - 卸载走「设置 → 应用 → 语境词块本」，或安装目录里的 `unins000.exe`。
-- **卸载不删学习数据**：数据存在浏览器的 localStorage / IndexedDB 里（`%APPDATA%\EcChunks`），与安装目录无关。
+- **卸载不删学习数据**：笔记固定存在「程序目录下的 `data` 文件夹」（`electron/main.js` 的 `setupPortableUserData()`），整个文件夹拷走笔记就跟着走；卸载程序只删自己安装的文件，`data` 会保留。
 
 ## 重新打包
 
