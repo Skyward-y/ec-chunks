@@ -1,0 +1,52 @@
+{
+  "name": "ec-chunks",
+  "version": "0.5.0",
+  "description": "语境词块本 · 把整篇文章拆成词块来背的离线英语学习 App",
+  "main": "electron/main.js",
+  "author": "Skyward-y",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable",
+    "dist:setup": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.github.skywardy.ecchunks",
+    "productName": "EcChunks",
+    "electronVersion": "45.0.0",
+    "directories": {
+      "output": "dist",
+      "buildResources": "electron"
+    },
+    "files": [
+      "electron/**/*",
+      "*.html",
+      "manifest.webmanifest",
+      "sw.js",
+      "icon.svg",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "EcChunks-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "EcChunks-${version}-setup.exe"
+    }
+  },
+  "allowScripts": {
+    "electron": true
+  }
+}

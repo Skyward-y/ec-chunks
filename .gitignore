@@ -16,6 +16,11 @@ cat-doodle.svg
 Thumbs.db
 desktop.ini
 
+# —— Electron 打包（见 BUILD-EXE.md） ——
+node_modules/
+dist/
+npm-debug.log*
+
 # 导出备份（含个人学习数据，不要提交）
 词块本-*.json
 词块本-*.csv
