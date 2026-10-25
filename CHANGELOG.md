@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.5 — Windows 桌面版
+
+- **新增 Electron 桌面版**：Windows 安装包 `EcChunks-0.5.0-setup.exe`（免管理员、建桌面/开始菜单快捷方式）与免安装 zip
+- 桌面版把笔记存在「程序目录下的 `data` 文件夹」，整个文件夹拷走笔记就跟着走；卸载不删数据
+- 修复 Win11 24H2/25H2（build 26000+）上的 Chromium 启动崩溃与渲染进程 `launch-failed`（关闭硬件加速与渲染器沙箱）
+- 打包改用 Inno Setup（`npm run dist`）而不是 NSIS：本机 `makensis` 写大文件会被安全软件拦截，已内置编译器到 `tools/inno-setup/`
+- README 重写：安装包放在最前面，新增「桌面版 vs 网页版」对照与桌面版排障说明
+
 ## 未发布
 
 - **云同步（Supabase，可选）**：统计页「云同步」卡片，填 Project URL + anon key → 邮箱注册/登录 → 自动上传（改动后 3 秒防抖）
