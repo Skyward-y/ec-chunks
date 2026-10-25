@@ -1,6 +1,6 @@
 {
   "name": "ec-chunks",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "语境词块本 · 把整篇文章拆成词块来背的离线英语学习 App",
   "main": "electron/main.js",
   "author": "Skyward-y",
@@ -8,14 +8,25 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "npm run dist:dir && node tools/build-installer.js",
-    "dist:dir": "electron-builder --win dir",
+    "dist": "npm run dist:dir && node tools/build-installer.js && node tools/build-portable.js",
+    "dist:dir": "node tools/stamp-sw.js && electron-builder --win dir",
+    "stamp": "node tools/stamp-sw.js",
     "dist:inno": "node tools/build-installer.js",
-    "pack:app": "node tools/update-app.js"
+    "dist:portable": "node tools/build-portable.js",
+    "pack:app": "node tools/update-app.js",
+    "test": "node tools/smoke.js",
+    "lint": "eslint electron tools sw.js app.js pwa.js redirect.js",
+    "lint:html": "node tools/lint-html.js",
+    "lint:all": "npm run lint && npm run lint:html",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint:all && npm test"
   },
   "devDependencies": {
     "electron": "^45.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.39.4",
+    "prettier": "^3.9.10"
   },
   "build": {
     "appId": "io.github.skywardy.ecchunks",
@@ -30,6 +41,7 @@
     "files": [
       "electron/**/*",
       "*.html",
+      "*.js",
       "manifest.webmanifest",
       "sw.js",
       "icon.svg",
@@ -45,26 +57,12 @@
       "signAndEditExecutable": false,
       "target": [
         {
-          "target": "nsis",
+          "target": "dir",
           "arch": [
             "x64"
           ]
         }
       ]
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "语境词块本",
-      "deleteAppDataOnUninstall": false,
-      "artifactName": "EcChunks-${version}-setup.${ext}",
-      "script": "installer.nsi",
-      "installerLanguages": [
-        "zh_CN"
-      ],
-      "uninstallDisplayName": "语境词块本 ${version}"
     }
   },
   "allowScripts": {

@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Windows 批处理必须是 CRLF，否则 cmd 解析会错行（免安装版的启动脚本靠这条保证克隆出来就能用）
+*.bat text eol=crlf
+
+# 安装器脚本同理（Inno Setup 按行读）
+*.iss text eol=crlf

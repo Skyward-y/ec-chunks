@@ -4,8 +4,8 @@
 
 | 文件 | 大小 | 用途 |
 | --- | --- | --- |
-| `dist/EcChunks-0.5.0-setup.exe` | 107 MB | **正式安装包**，双击安装，装完桌面 / 开始菜单有「语境词块本」 |
-| `dist/EcChunks-v0.5.0-win64.zip` | 126 MB | **免安装版**，解压后双击里面的 `EcChunks.exe` 直接用 |
+| `dist/EcChunks-0.6.0-setup.exe` | 107 MB | **正式安装包**，双击安装，装完桌面 / 开始菜单有「语境词块本」 |
+| `dist/EcChunks-v0.6.0-win64.zip` | 139 MB | **免安装版**，解压后双击里面的 `EcChunks.exe` 直接用；起不来就试同目录的两个 `.bat` |
 
 `dist/win-unpacked/`（约 310 MB）是打包**中间产物**，`npm run dist:dir` 会重新生成，随时可以删。
 
@@ -19,9 +19,10 @@
 ## 重新打包
 
 ```powershell
-npm run dist          # = 下面两条
-npm run dist:dir      # electron-builder 生成 dist/win-unpacked
-npm run dist:inno     # Inno Setup 把 win-unpacked 压成 dist/EcChunks-<version>-setup.exe
+npm run dist           # = 下面三条
+npm run dist:dir       # electron-builder 生成 dist/win-unpacked（顺带重算 sw.js 的 CACHE_VERSION）
+npm run dist:inno      # Inno Setup 把 win-unpacked 压成 dist/EcChunks-<version>-setup.exe
+npm run dist:portable  # 把 win-unpacked 打成 dist/EcChunks-v<version>-win64.zip（免安装）
 ```
 
 只改了网页（`ec-chunks-fixed.html`）时也必须重跑 `npm run dist`，因为页面是打进 `resources/app.asar` 的。
@@ -32,7 +33,7 @@ npm run dist:inno     # Inno Setup 把 win-unpacked 压成 dist/EcChunks-<versio
 
 electron-builder 的 NSIS 目标在本机**无法完成打包**，已实测确认：
 
-- `makensis.exe`（NSIS 3.0.4.1 和 3.0.5.0 都试过）一旦要写超过约 10 MB 的输出就失败：
+- `makensis.exe`（NSIS 3.0.4.1 和 3.0.6.0 都试过）一旦要写超过约 10 MB 的输出就失败：
   `Internal compiler error #12345: error creating mmap the size of 142606340`，
   小包则是 `Can't open output file`。
 - 同样的 mmap 在 32 位和 64 位 PowerShell 里都能成功映射 136 MB，说明不是系统限制；
@@ -49,7 +50,26 @@ electron/installer.iss      安装脚本（UTF-8 BOM，路径相对 electron/）
 tools/build-installer.js    调用 ISCC 的封装（自动补 BOM、同步版本号）
 ```
 
-`tools/patch-nsis.js` 和 `electron/installer.nsi` 是 NSIS 路线的遗留物，当前**不参与构建**，可以删。
+NSIS 路线的遗留物（`tools/patch-nsis.js`、`electron/installer.nsi`，以及 `package.json` 里的 `nsis` 配置）已经删了：`dist:dir` 用 `--win dir` 出目录，安装包完全由 ISCC 生成。
+
+### 免安装 zip 是怎么来的
+
+`tools/build-portable.js` 基于 `dist/win-unpacked` 流式压缩（借 Windows 自带的 `System.IO.Compression`，不引第三方依赖，250 MB 的 exe 也不会被整个读进内存），顶层目录固定为 `EcChunks/`。以前这个 zip 是手工打的，所以出现过「zip 里还是上一版页面」的情况。
+
+两个启动脚本收在仓库里（`electron/portable/`），打包时一起塞进 zip 根目录：
+
+| 脚本 | 什么时候用 |
+| --- | --- |
+| `启动语境词块本.bat` | 双击 exe 白屏 / 报 `ERR_FAILED` 时用，加上关掉渲染器沙箱与代码完整性校验的参数 |
+| `兼容模式启动.bat` | 上面那个还不行时的最后手段，加 `--single-process` 把所有 Chromium 子进程并进主进程 |
+
+> 历史坑：这两个 bat 以前写的是 `start "" "%~dp0electron.exe"`，而 electron-builder 产出的可执行文件叫 `EcChunks.exe`（取 `productName`），所以双击必然「找不到文件」；文件里还有一段重复的 `@echo off` 头（旧版本拼接失误）。现在 bat 由仓库维护，`npm test` 里有断言守着（必须调 `EcChunks.exe`、必须是 CRLF 行尾），改错会当场失败。
+
+### 别删 dist 里的旧解压目录
+
+`dist/EcChunks-v0.6.0-win64/`（是解压出来的目录，不是 zip）里带着 `EcChunks/data/`，那是实际跑过之后留下的 Chromium 数据目录，**笔记就在 `data/Local Storage/leveldb/`**。它不属于构建产物，重新打包时不要顺手删；升级时把新 zip 解压到别处、只覆盖程序文件，保留 `data/` 即可。
+
+打包前 `dist:dir` 会自动跑 `node tools/stamp-sw.js`，按静态资源内容重算 `sw.js` 里的 `CACHE_VERSION`（手写必然忘记 bump，老用户会卡在旧缓存上）。想单独检查是否过期：`node tools/stamp-sw.js --check`。
 
 ## 首次运行的两个坑（已在 main.js 里处理）
 

@@ -17,7 +17,15 @@ const OUT_DIR = path.join(ROOT, 'dist', 'EcChunks');
 const BUILD = path.join(ROOT, 'dist', 'app-build');
 const TARGET = path.join(OUT_DIR, 'resources', 'app.asar');
 const MAIN = path.join(ROOT, 'electron', 'main.js');
-const ITEMS = ['electron', 'index.html', 'ec-chunks-fixed.html', 'manifest.webmanifest', 'sw.js', 'icon.svg', 'package.json'];
+const ITEMS = [
+  'electron',
+  'index.html',
+  'ec-chunks-fixed.html',
+  'manifest.webmanifest',
+  'sw.js',
+  'icon.svg',
+  'package.json'
+];
 
 async function main() {
   if (!fs.existsSync(OUT_DIR)) {

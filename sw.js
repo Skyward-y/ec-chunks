@@ -12,69 +12,82 @@
  */
 
 const CACHE_PREFIX = 'ecchunks-';
-const CACHE_VERSION = 'v1';
+/* 版本号由 tools/stamp-sw.js 按静态资源内容哈希重写，不要手写：手写必然忘记 bump，
+ * 结果就是改了 app.js 之后老用户一直看到旧页面。 */
+const CACHE_VERSION = 'cbf3110b7f';
 const CACHE = CACHE_PREFIX + CACHE_VERSION;
 
-/* 安装时尽量预缓存；任何一个 404 都不应让安装失败 */
-const PRE_CACHE = ['./', './manifest.webmanifest', './icon.svg'];
+/* 安装时尽量预缓存；任何一个 404 都不应让安装失败。
+   脚本也在这里预缓存：首次离线打开时如果 app.js 没进缓存，页面壳会渲染出来但一个字都点不动。 */
+const PRE_CACHE = ['./', './app.js', './pwa.js', './redirect.js', './manifest.webmanifest', './icon.svg'];
 
-self.addEventListener('install', event => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    await Promise.all(PRE_CACHE.map(url => cache.add(url).catch(() => {})));
-    await self.skipWaiting();
-  })());
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(PRE_CACHE.map((url) => cache.add(url).catch(() => {})));
+      await self.skipWaiting();
+    })()
+  );
 });
 
-self.addEventListener('activate', event => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(
-      keys.filter(k => k.startsWith(CACHE_PREFIX) && k !== CACHE).map(k => caches.delete(k))
-    );
-    await self.clients.claim();
-  })());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE).map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })()
+  );
 });
 
-self.addEventListener('fetch', event => {
+self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
   let url;
-  try { url = new URL(req.url); } catch (e) { return; }
+  try {
+    url = new URL(req.url);
+  } catch (e) {
+    return;
+  }
   /* 只管自己的静态资源；翻译接口等跨域请求放行 */
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {
-    event.respondWith((async () => {
-      try {
-        const fresh = await fetch(req);
-        if (fresh && fresh.ok) {
+    event.respondWith(
+      (async () => {
+        try {
+          const fresh = await fetch(req);
+          if (fresh && fresh.ok) {
+            const cache = await caches.open(CACHE);
+            cache.put(req, fresh.clone()).catch(() => {});
+          }
+          return fresh;
+        } catch (e) {
           const cache = await caches.open(CACHE);
-          cache.put(req, fresh.clone()).catch(() => {});
+          const hit = await cache.match(req);
+          if (hit) return hit;
+          const shell = await cache.match('./');
+          if (shell) return shell;
+          return new Response('离线状态，且没有缓存到这个页面。', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
         }
-        return fresh;
-      } catch (e) {
-        const cache = await caches.open(CACHE);
-        const hit = await cache.match(req);
-        if (hit) return hit;
-        const shell = await cache.match('./');
-        if (shell) return shell;
-        return new Response('离线状态，且没有缓存到这个页面。', {
-          status: 503,
-          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-        });
-      }
-    })());
+      })()
+    );
     return;
   }
 
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const hit = await cache.match(req);
-    if (hit) return hit;
-    const fresh = await fetch(req);
-    if (fresh && fresh.ok) cache.put(req, fresh.clone()).catch(() => {});
-    return fresh;
-  })());
+  event.respondWith(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const fresh = await fetch(req);
+      if (fresh && fresh.ok) cache.put(req, fresh.clone()).catch(() => {});
+      return fresh;
+    })()
+  );
 });

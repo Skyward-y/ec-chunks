@@ -1,10 +1,14 @@
 # —— 项目文件之外的东西，别一起提交 ——
 
 # 本机调试遗留（DSH / asar 分析等）
+.tmp/
 _*.js
 _*.md
 _*.json
 *.bat
+
+# 例外：免安装版的启动脚本要进仓库（tools/build-portable.js 会把它们塞进 zip）
+!electron/portable/*.bat
 
 # 临时截图与草稿
 pasted-screenshot.jpg
@@ -20,6 +24,9 @@ desktop.ini
 node_modules/
 dist/
 npm-debug.log*
+
+# npm 装在项目内的缓存（默认缓存在 %LOCALAPPDATA%，沙箱/权限受限时要靠这个目录）
+.npm-cache/
 
 # 打包工具链下载缓存（Electron zip、NSIS、Inno Setup 安装包等，几百 MB）
 .cache/

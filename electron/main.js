@@ -34,13 +34,28 @@ const ROOT = path.join(__dirname, '..');
 // 双击启动没有控制台可看，关键事件另写一份到 %TEMP%\ecchunks-startup.log
 const LOG_PATH = path.join(process.env.TEMP || process.env.LOCALAPPDATA || __dirname, 'ecchunks-startup.log');
 function logLine(...parts) {
-  const line = new Date().toISOString() + ' ' + parts.map((p) => {
-    if (typeof p === 'string') return p;
-    if (p instanceof Error) return p.stack || p.message;
-    try { return JSON.stringify(p); } catch (e) { return String(p); }
-  }).join(' ');
-  try { fs.appendFileSync(LOG_PATH, line + '\r\n'); } catch (e) { /* 写不了也不影响启动 */ }
-  try { console.log(line); } catch (e) {}
+  const line =
+    new Date().toISOString() +
+    ' ' +
+    parts
+      .map((p) => {
+        if (typeof p === 'string') return p;
+        if (p instanceof Error) return p.stack || p.message;
+        try {
+          return JSON.stringify(p);
+        } catch (e) {
+          return String(p);
+        }
+      })
+      .join(' ');
+  try {
+    fs.appendFileSync(LOG_PATH, line + '\r\n');
+  } catch (e) {
+    /* 写不了也不影响启动 */
+  }
+  try {
+    console.log(line);
+  } catch (e) {}
 }
 // ---------------------------------------------------------------------------
 // 数据存放位置：便携模式下放在「程序目录\data」，整个文件夹拷到 U 盘/别的电脑
@@ -64,11 +79,12 @@ function logLine(...parts) {
     logLine('程序目录不可写，退出', e);
     dialog.showErrorBox(
       '无法保存笔记',
-      '程序所在目录不可写：\n' + exeDir +
-      '\n\n语境词块本把笔记保存在程序目录下的 data 文件夹里。' +
-      '当前目录不允许写入，最常见的原因是把它放进了 Program Files。' +
-      '\n\n请把整个 EcChunks 文件夹移动到可写的位置' +
-      '（例如 D:\\Apps\\EcChunks、桌面或 U 盘），然后重新打开。'
+      '程序所在目录不可写：\n' +
+        exeDir +
+        '\n\n语境词块本把笔记保存在程序目录下的 data 文件夹里。' +
+        '当前目录不允许写入，最常见的原因是把它放进了 Program Files。' +
+        '\n\n请把整个 EcChunks 文件夹移动到可写的位置' +
+        '（例如 D:\\Apps\\EcChunks、桌面或 U 盘），然后重新打开。'
     );
     app.exit(1);
     return;
@@ -92,7 +108,32 @@ logLine('boot', {
 // 之前这里传 0 让系统随机分配端口，正是「内容存不住」的根因。
 // ---------------------------------------------------------------------------
 const PREFERRED_PORT = 47821;
-const PORT_TRIES = 10;
+// 顺延范围给得大一点：每顺延一格都是新的 origin，但只要顺序是确定的，
+// 下次启动还会落到同一个备用端口上，至少不会每次丢在不一样的地方。
+const PORT_TRIES = 30;
+
+// 上次成功用过的端口，记在 data 目录里（跟着便携目录一起走）。
+// 端口变了 = 这次读的是另一个 origin 的存储，必须在界面上明确告诉用户。
+const PORT_FILE = path.join(app.getPath('userData'), 'port.json');
+let portChangedFrom = 0; // 非 0 表示这次换了端口，值是上次用的端口
+
+function readLastPort() {
+  try {
+    const j = JSON.parse(fs.readFileSync(PORT_FILE, 'utf8'));
+    const p = Number(j && j.port);
+    return Number.isFinite(p) && p > 0 ? p : 0;
+  } catch (e) {
+    return 0; // 第一次启动 / 文件被删，都当作没有记录
+  }
+}
+
+function writeLastPort(port) {
+  try {
+    fs.writeFileSync(PORT_FILE, JSON.stringify({ port: port, at: new Date().toISOString() }, null, 2));
+  } catch (e) {
+    logLine('WARN 记录端口失败', e);
+  }
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -116,7 +157,7 @@ const MIME = {
 };
 
 let server = null;
-let origin = '';      // 例：http://127.0.0.1:53124
+let origin = ''; // 例：http://127.0.0.1:53124
 let win = null;
 
 function startServer() {
@@ -153,13 +194,20 @@ function startServer() {
     });
 
     // 固定端口；万一被别的程序占用，就在相邻的 10 个端口里顺延
-    const attempt = (port) => new Promise((res, rej) => {
-      const onOk = () => { server.removeListener('error', onErr); res(server.address().port); };
-      const onErr = (e) => { server.removeListener('listening', onOk); rej(e); };
-      server.once('listening', onOk);
-      server.once('error', onErr);
-      server.listen(port, '127.0.0.1');
-    });
+    const attempt = (port) =>
+      new Promise((res, rej) => {
+        const onOk = () => {
+          server.removeListener('error', onErr);
+          res(server.address().port);
+        };
+        const onErr = (e) => {
+          server.removeListener('listening', onOk);
+          rej(e);
+        };
+        server.once('listening', onOk);
+        server.once('error', onErr);
+        server.listen(port, '127.0.0.1');
+      });
 
     (async () => {
       for (let p = PREFERRED_PORT; p < PREFERRED_PORT + PORT_TRIES; p++) {
@@ -173,14 +221,22 @@ function startServer() {
           throw e;
         }
       }
-      // 极端情况：连续 10 个端口都被占。仍退回随机端口保证能打开，
-      // 但数据会落到另一个 origin 上，所以必须把这事写进日志。
+      // 极端情况：首选端口段的 30 个端口全被占。仍退回随机端口保证能打开，
+      // 但数据会落到一个不固定的 origin 上 —— 这种「每次都可能换地址」的情况
+      // 除写日志外，还要在窗口标题上标出来（见 createWindow）。
       logLine('WARN 首选端口段全部被占用，退回随机端口，本次数据与之前不互通');
       return await attempt(0);
     })().then(
       (port) => {
         origin = `http://127.0.0.1:${port}`;
-        logLine('本地服务已就绪', origin);
+        // 端口换了就是换了 origin：记下来，稍后在窗口上告诉用户。
+        const prev = readLastPort();
+        if (prev && prev !== port) portChangedFrom = prev;
+        writeLastPort(port);
+        logLine('本地服务已就绪', origin, prev && prev !== port ? `（上次是 ${prev}）` : '');
+        if (port !== PREFERRED_PORT) {
+          logLine('WARN 未使用首选端口', { preferred: PREFERRED_PORT, actual: port, previous: prev || null });
+        }
         resolve();
       },
       (err) => reject(err)
@@ -240,9 +296,12 @@ async function createWindow() {
     logLine('render-process-gone', details || {});
     dialog.showErrorBox(
       '页面意外退出',
-      '语境词块本渲染进程已停止：' + (details && details.reason ? details.reason : 'unknown') +
-      (details && typeof details.exitCode === 'number' ? '（exitCode=' + details.exitCode + '）' : '') +
-      '\n\n日志文件：' + LOG_PATH + '\n请重新打开应用。'
+      '语境词块本渲染进程已停止：' +
+        (details && details.reason ? details.reason : 'unknown') +
+        (details && typeof details.exitCode === 'number' ? '（exitCode=' + details.exitCode + '）' : '') +
+        '\n\n日志文件：' +
+        LOG_PATH +
+        '\n请重新打开应用。'
     );
   });
 
@@ -254,6 +313,35 @@ async function createWindow() {
     dialog.showErrorBox('打开失败', '无法加载应用页面。\n' + (err && err.message ? err.message : String(err)));
     app.quit();
     return;
+  }
+
+  // 端口变了 → 这次是另一个 origin，界面上的笔记看起来「没了」。
+  // 以前只写一行日志，用户看到的就是「数据丢了」；现在明确说清楚 + 标题上留痕。
+  if (portChangedFrom) {
+    const port = Number(origin.split(':').pop());
+    const suffix = `（备用端口 ${port}）`;
+    win.on('page-title-updated', (e) => {
+      e.preventDefault();
+      win.setTitle('语境词块本' + suffix);
+    });
+    win.setTitle('语境词块本' + suffix);
+    await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: '这次用的是备用端口',
+      message: `本次地址是 127.0.0.1:${port}，上次是 127.0.0.1:${portChangedFrom}。`,
+      detail:
+        '笔记是按「地址」分开存放的（浏览器本地存储的规则），所以你在上次地址上的词块和进度' +
+        '这次看不到 —— 数据没有被删除，仍然在磁盘上。\n\n' +
+        `最常见的原因是别的程序占用了 ${PREFERRED_PORT} 附近的端口。关掉那个程序再重新打开本应用，` +
+        '就会回到原来的地址，笔记自动回来。\n\n' +
+        `想查是谁占着：在 PowerShell 里运行  netstat -ano | findstr :${PREFERRED_PORT}\n` +
+        '启动日志：' +
+        LOG_PATH,
+      buttons: ['知道了'],
+      defaultId: 0,
+      noLink: true
+    });
+    logLine('端口变化已告知用户', { from: portChangedFrom, to: port });
   }
 
   // 调试用：启动前设置环境变量 EC_DEBUG=1 会自动打开开发者工具
@@ -281,7 +369,7 @@ if (!gotLock) {
       console.log('[main] 窗口已创建，页面地址：' + origin + '/index.html');
     } catch (err) {
       console.error('[main] 启动失败：', err && err.stack ? err.stack : err);
-      dialog.showErrorBox('启动失败', (err && err.message) ? err.message : String(err));
+      dialog.showErrorBox('启动失败', err && err.message ? err.message : String(err));
       app.quit();
     }
     app.on('activate', () => {
@@ -291,7 +379,11 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     if (server) {
-      try { server.close(); } catch (e) { /* 忽略 */ }
+      try {
+        server.close();
+      } catch (e) {
+        /* 忽略 */
+      }
       server = null;
     }
     app.quit();

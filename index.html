@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>语境词块本</title>
 <link rel="manifest" href="./manifest.webmanifest">
@@ -12,7 +13,7 @@
   之所以不把应用内容直接改名成 index.html，是因为它已经是完整可用的单文件，
   重命名只需一步（见 README「可选：改名为 index.html」），而 manifest / sw.js 都按相对路径写，不受影响。
 -->
-<script>location.replace('./ec-chunks-fixed.html');</script>
+<script src="./redirect.js"></script>
 </head>
 <body style="margin:0;background:#f4f8f6;color:#1d2b26;font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;">
   <noscript>

@@ -1,0 +1,13 @@
+# 页面与页面脚本保持手写排版：app.js 是从 HTML 里拆出来的（原内联 <script> 风格高密度，
+# 一行常有多条语句），格式化一次就是几千行纯噪音 diff，还会让以后 review 无从下手。
+# 所以 prettier 只管 electron/、tools/、sw.js、配置文件和文档以外的新脚本。
+*.html
+app.js
+pwa.js
+redirect.js
+node_modules/
+dist/
+.cache/
+.npm-cache/
+.tmp/
+*.md

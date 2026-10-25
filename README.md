@@ -10,8 +10,8 @@
 
 | 版本 | 文件 | 大小 | 怎么用 |
 | :--: | --- | :--: | --- |
-| **安装版**<br>（推荐） | [`EcChunks-0.5.0-setup.exe`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.5.0/EcChunks-0.5.0-setup.exe) | 103 MB | 双击安装 → 桌面和开始菜单出现「语境词块本」 |
-| **免安装版** | [`EcChunks-v0.5.0-win64.zip`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.5.0/EcChunks-v0.5.0-win64.zip) | 126 MB | 解压 → 双击里面的 `EcChunks.exe` |
+| **安装版**<br>（推荐） | [`EcChunks-0.6.0-setup.exe`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.6.0/EcChunks-0.6.0-setup.exe) | 103 MB | 双击安装 → 桌面和开始菜单出现「语境词块本」 |
+| **免安装版** | [`EcChunks-v0.6.0-win64.zip`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.6.0/EcChunks-v0.6.0-win64.zip) | 126 MB | 解压 → 双击里面的 `EcChunks.exe` |
 
 全部下载都在 [Releases](https://github.com/Skyward-y/ec-chunks/releases) 页面。
 
@@ -58,16 +58,20 @@
 
 **读**
 - 逐句中英对照，英文词块绿色高亮，中文按**句级对齐**同步高亮；定位不到的意思会以 `词块｜意思` 小标签列出
-- 选中英文任意片段即可加进词块本（内置文章也支持）
+- **页面上任何英文都能框选**：正文里选中直接进「加词块」窗口（能改词块、能补中文、会回写到这一课）；题干、选项、解析、例句这些位置选中先给译文条，想收进词块本再点一下，来源记成「页面：X」
+- 每句英文下面有一行按钮：「翻译」只展开这一句的中文（再点收起，和卡片头那个「显示翻译」可以叠加）、「语法」、「问 AI」
+- 「语法」（卡片头有「全部语法」一键开关）：按结构关键词提示从句、完成时、被动语态、非谓语等，最多 4 条，长句另给提示——是阅读提示，不是逐词语法标注。想要逐词拆解就点同一个位置上的「问 AI」：提示词带这句原文、正文现成的译文和命中的语法点，复制好并打开 AI 站点（默认 DeepSeek，可在统计页换成 ChatGPT / Kimi / 豆包 / 元宝，或自填网址；始终不经过任何服务器、本地不存 API Key）
 - 一键逐句自动翻译（Google 免费接口，失败自动回退 MyMemory）
 - 每段 / 每个词块 / 例句都能点 🔊 朗读（浏览器自带 TTS）
-- 理解题（选择题）+ 填空练习，答完直接给正确答案与解析
+- 理解题（选择题）+ 填空练习，答完直接给正确答案与解析：正确答案（带中文）、原句、翻译（填空给「句意」）。原句的中文优先从正文那段的译文里直接取（句数对得上就取同一句，对不上给整段），所以答完立刻有中文、不发请求、也不用点按钮；解析里不再另列一块重复的中文。想听更细的讲解就点「让 AI 讲讲这句」。填空可以一题一题对：每题下面有「看这题答案」，只判这一题、只展开这一题的答案；卡片头那颗「全部检查」只统计真的填了的题，空着的不判也不展开
 - 文章底部「上一篇 / 下一篇」，列表显示每篇「已收 x / y 个词块」
+- 「＋ 添加我的英文文章」里带一段可复制的 AI 提示词：按所选难度与主题、并带上词块本里还没掌握的表达，让 AI 生成一篇格式正好能粘回来的英文文章（英文逐句 / 中文逐句）
 
 **收藏与复习**
 - 词块本：搜索、按待复习 / 已掌握筛选、按来源筛选、排序、批量删除
 - 删除可撤销（右下角「撤销」+ 统计页「最近删除」回收站，最多 100 条）
 - 复习：英→中 / 中→英 双向、键盘 1-2-3 快捷键、「只练这次没记住的」、结束后造句收尾（自动勾上今日「输出」）
+- 错题本：答错的理解题与填空自动收进来（题干、正确答案、你上次选的、错了几次都在），可按「待订正 / 已订正」筛选、把原题重做一遍。卡片最前面的《文章标题》就是按钮，点一次直接打开那篇文章；「让 AI 讲讲」把题目、你的答案、正确答案和那段原文/译文拼成中文提示词，复制好并打开 AI 站点，粘上去就能问。已订正的条目攒多了可以在筛选行点「清空已订正」（只清 `fixed` 的，清掉同时留墓碑，云同步不会把它们搬回来）
 
 **进度与计划**
 - 今日流程清单（输入 / 收集 / 输出 / 复习）
@@ -169,8 +173,11 @@ create policy "own update" on public.states for update using (auth.uid() = user_
 
 ```
 .
-├── ec-chunks-fixed.html    # 应用本体：单文件（HTML + CSS + JS + 内置文章），桌面版也用它
-├── index.html              # 网页版入口（自动跳转到应用本体，GitHub Pages 根路径需要）
+├── ec-chunks-fixed.html    # 应用本体：结构 + 样式（桌面版也用它）
+├── app.js                  # 应用逻辑（原先是 HTML 里的内联 <script>，为了能用 CSP 才拆出来）
+├── pwa.js                  # 注册 Service Worker（独立出来同样是 CSP 的要求）
+├── index.html              # 网页版入口（GitHub Pages 根路径需要，脚本在 redirect.js）
+├── redirect.js             # 入口页跳转到应用本体
 ├── manifest.webmanifest    # PWA 清单
 ├── sw.js                   # Service Worker（离线缓存）
 ├── icon.svg                # 网页图标
@@ -181,7 +188,12 @@ create policy "own update" on public.states for update using (auth.uid() = user_
 ├── tools/
 │   ├── build-installer.js  #   一条命令产出安装包
 │   ├── update-app.js       #   把网页打进 app.asar
+│   ├── stamp-sw.js         #   按资源内容重算 sw.js 的缓存版本号（打包时自动跑）
+│   ├── smoke.js            #   npm test：把 app.js 放进 DOM 桩里跑的冒烟测试
+│   ├── lint-html.js        #   npm run lint:html：检查页面无内联脚本 / 有 CSP
 │   └── inno-setup/         #   内置编译器（已带中文语言包，无需联网）
+├── eslint.config.js        # 代码检查配置（只开会出 bug 的规则，格式交给 prettier）
+├── .prettierrc.json        # 格式配置
 ├── BUILD-EXE.md            # 打包 / 安装包说明与踩坑记录
 ├── README.md
 ├── CHANGELOG.md
@@ -207,13 +219,30 @@ npm run dist:inno     # Inno Setup 压成 dist/EcChunks-<version>-setup.exe
 
 ---
 
+## 本地开发与自检
+
+```powershell
+npm run check       # = lint + lint:html + test，改完跑一次
+npm run lint        # ESLint：electron/、tools/、sw.js、app.js、pwa.js、redirect.js
+npm run lint:html   # 页面守则：不许内联 <script>、不许 on* 属性、必须有 CSP
+npm test            # 冒烟测试：把 app.js 放进 DOM 桩里跑，不需要浏览器
+npm run format      # prettier --write .
+```
+
+两个约定，不遵守会踩坑：
+
+- **页面里有 CSP（`script-src 'self'`）**：别再往 HTML 里写 `<script>` 或 `onclick=`——浏览器会直接拦掉，而且**控制台不报错**，表现就是"这块点了没反应"。交互统一写在 `app.js` 里，用 `data-*` + 事件委托挂（`renderLearnList` 的卡片就是这么改的）。
+- **别手改 `sw.js` 的 `CACHE_VERSION`**：版本号由 `tools/stamp-sw.js` 按静态资源内容算，`npm run dist:dir` 会自动跑；手写版本号一旦忘记 bump，装过的用户会一直停在旧缓存上。
+
+---
+
 ## 数据结构
 
 存在 `localStorage['ecChunksApp_v3']`（桌面版即在 `data` 目录下的 Chromium 存储里），整体是一个 JSON：
 
 ```jsonc
 {
-  "version": 3,
+  "version": 5,            // DATA_VERSION：读到比它大的数字会先提醒导出备份
   "chunks": [            // 词块本
     {
       "id": "…", "chunk": "wake up", "sentence": "I wake up at seven.",
@@ -226,7 +255,11 @@ npm run dist:inno     # Inno Setup 压成 dist/EcChunks-<version>-setup.exe
   "logs": { "2026-10-24": { "inputDone": true, "outputDone": false, "reviewed": 3 } },
   "streak": 5, "lastActive": "2026-10-24",
   "settings": { "currentWeek": 1, "lastLessonId": "b1", "exportedAt": "…" },
-  "customLessons": []    // 你自己加的文章 + 自动生成的复习短文（id 以 gen_ 开头）
+  "customLessons": [],   // 你自己加的文章 + 自动生成的复习短文（id 以 gen_ 开头）
+  "mistakes": {},        // 错题本：键是 `课程id|quiz|题号`，同题反复错只累加次数
+  "trCache": {},         // 机器翻译缓存（英文 → 中文），上限 3000 条，云同步时取并集
+  "deletedLessons": {},  // 删掉的课程墓碑：并集合并时靠它避免"删了又被云端拉回来"
+  "deletedMistakes": {}  // 清掉的错题墓碑：同上，清掉后云同步不会把它搬回来
 }
 ```
 
@@ -237,7 +270,7 @@ npm run dist:inno     # Inno Setup 压成 dist/EcChunks-<version>-setup.exe
 ## 自定义内容
 
 - **加文章**：学习页 →「＋ 添加我的英文文章」，粘贴英文，中文可留空（保存时会逐句补译），系统会自动切句、提取词块、出理解题和填空题。
-- **改内置文章**：编辑 `ec-chunks-fixed.html` 里的 `const LESSONS = [...]`（在 `<script>` 开头附近），格式见文件内注释；`text` 与 `textZh` 按段落一一对应即可。
+- **改内置文章**：编辑 `app.js` 里的 `const LESSONS = [...]`（在文件开头附近；页面脚本 2024 年从 HTML 拆了出来），格式见文件内注释；`text` 与 `textZh` 按段落一一对应即可。
 - **改复习间隔**：搜 `const INTERVALS`。
 - **改内置词典**：搜 `const CHUNK_GLOSSARY`（用于自动填词块中文意思）。
 
