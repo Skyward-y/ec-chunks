@@ -21,6 +21,9 @@ node_modules/
 dist/
 npm-debug.log*
 
+# 打包工具链下载缓存（Electron zip、NSIS、Inno Setup 安装包等，几百 MB）
+.cache/
+
 # 导出备份（含个人学习数据，不要提交）
 词块本-*.json
 词块本-*.csv

@@ -8,8 +8,10 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable",
-    "dist:setup": "electron-builder --win nsis"
+    "dist": "npm run dist:dir && node tools/build-installer.js",
+    "dist:dir": "electron-builder --win dir",
+    "dist:inno": "node tools/build-installer.js",
+    "pack:app": "node tools/update-app.js"
   },
   "devDependencies": {
     "electron": "^45.0.0",
@@ -19,6 +21,8 @@
     "appId": "io.github.skywardy.ecchunks",
     "productName": "EcChunks",
     "electronVersion": "45.0.0",
+    "electronDist": "node_modules/electron/dist",
+    "copyright": "Copyright © 2026 Skyward-y",
     "directories": {
       "output": "dist",
       "buildResources": "electron"
@@ -31,19 +35,36 @@
       "icon.svg",
       "package.json"
     ],
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "afterPack": "tools/after-pack.js",
     "win": {
+      "icon": "electron/icon.ico",
+      "signAndEditExecutable": false,
       "target": [
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
-    "portable": {
-      "artifactName": "EcChunks-${version}-portable.exe"
-    },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "artifactName": "EcChunks-${version}-setup.exe"
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "语境词块本",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "EcChunks-${version}-setup.${ext}",
+      "script": "installer.nsi",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "uninstallDisplayName": "语境词块本 ${version}"
     }
   },
   "allowScripts": {
