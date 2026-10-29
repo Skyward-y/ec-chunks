@@ -565,6 +565,93 @@ test('分句：缩写和小数里的句点不当句末（a.m. / U.S. / 3.50）',
   assert.strictEqual(split('No dot at all'), 'No dot at all', '没有句点就整段当一句');
 });
 
+test('切句只有一套规则：列表版与保留位置版给出同样的句子', () => {
+  const r = run(`(function(){
+    var cases = [
+      'We left at 9 a.m. It was cold.',
+      'He lives in the U.S. She lives in Canada.',
+      'Wait... what? Really!',
+      'She said "Hi." Then she left.',
+      'It cost $3.50. I paid cash.',
+      'No dot at all'
+    ];
+    return cases.map(function(s){
+      var list = splitEnglishSentences(s).join(' | ');
+      var segs = splitEnSegments(s).map(function(x){ return x.text.trim(); }).join(' | ');
+      return { list: list, same: list === segs };
+    });
+  })()`);
+  assert.strictEqual(r[2].list, 'Wait... | what? | Really!', '连写的句末标点算一个，别切成一串点');
+  assert.strictEqual(r[3].list, 'She said "Hi." | Then she left.', '句末引号属于上一句');
+  r.forEach((one, i) => assert.strictEqual(one.same, true, '第 ' + i + ' 个例子两种切法不一致：' + one.list));
+});
+
+test('中文省略号整串算一个句末，不从中间切开', () => {
+  const r = run(
+    "[splitChineseSentences('他想了很久……然后走了。').join(' | '), splitChineseSentences('好…').join(' | '), splitChineseSentences('就这样吧').join(' | ')]"
+  );
+  assert.strictEqual(r[0], '他想了很久…… | 然后走了。');
+  assert.strictEqual(r[1], '好…');
+  assert.strictEqual(r[2], '就这样吧', '没有句末标点时整段当一句，不能丢');
+});
+
+test('全部语料：两种切法一致，切完不丢字', () => {
+  const r = run(`(function(){
+    var bad = [];
+    allLessons().forEach(function(l){
+      (l.text || []).forEach(function(p, idx){
+        var list = splitEnglishSentences(p);
+        var segs = splitEnSegments(p).map(function(x){ return x.text.trim(); });
+        if (list.join('|') !== segs.join('|')) bad.push('EN 不一致 ' + l.id + '#' + idx);
+        if (list.join('').replace(/\\s+/g, '') !== String(p).replace(/\\s+/g, '')) bad.push('EN 丢字 ' + l.id + '#' + idx);
+      });
+      (l.textZh || []).forEach(function(p, idx){
+        var list = splitChineseSentences(p);
+        var segs = splitZhSegments(p).map(function(x){ return x.text.trim(); });
+        if (list.join('|') !== segs.join('|')) bad.push('ZH 不一致 ' + l.id + '#' + idx);
+        if (list.join('').replace(/\\s+/g, '') !== String(p).replace(/\\s+/g, '')) bad.push('ZH 丢字 ' + l.id + '#' + idx);
+      });
+    });
+    return { n: bad.length, sample: bad.slice(0, 5) };
+  })()`);
+  assert.strictEqual(r.n, 0, '有段落不一致或丢了字：' + JSON.stringify(r.sample));
+});
+
+test('带缩写的段落也能把英文句对回中文那一句（以前会退回整段）', () => {
+  const r = run(`(function(){
+    var lesson = {
+      id: 'T', custom: true,
+      text: ['We left at 9 a.m. It was cold.'],
+      textZh: ['我们九点离开的。天很冷。']
+    };
+    var hit = zhForSentence(lesson, 'It was cold.');
+    return { zh: hit && hit.zh, scope: hit && hit.scope };
+  })()`);
+  assert.strictEqual(r.scope, 'sentence', '英文两句对中文两句，应该能精确到句；退回整段就说明切句又不一致了');
+  assert.strictEqual(r.zh, '天很冷。');
+});
+
+test('沙箱默认关，但可以用 EC_CHUNKS_SANDBOX=1 打开', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'electron', 'main.js'), 'utf8');
+  const start = src.indexOf('function sandboxRequested()');
+  assert.ok(start > 0, 'electron/main.js 里找不到 sandboxRequested');
+  const end = src.indexOf('\n}', start) + 2;
+  assert.match(src.slice(start, end), /process\.env\.EC_CHUNKS_SANDBOX/, '开关要读环境变量');
+  const read = (env) => {
+    const box = vm.createContext({ process: { env } });
+    vm.runInContext(src.slice(start, end), box);
+    return vm.runInContext('sandboxRequested()', box);
+  };
+  assert.strictEqual(read({}), false, '没设变量时必须保持今天的默认（关沙箱），不然老机器起不来');
+  assert.strictEqual(read({ EC_CHUNKS_SANDBOX: '0' }), false);
+  assert.strictEqual(read({ EC_CHUNKS_SANDBOX: '1' }), true);
+  assert.strictEqual(read({ EC_CHUNKS_SANDBOX: ' ON ' }), true, '手写的环境变量常带空格和大写');
+  /* 开关必须真的落到启动参数与窗口设置上，否则等于只是个摆设 */
+  assert.match(src, /if \(!USE_SANDBOX\) \{\r?\n\s*app\.disableHardwareAcceleration\(\);/);
+  assert.match(src, /app\.commandLine\.appendSwitch\('no-sandbox'\)/);
+  assert.match(src, /sandbox: USE_SANDBOX,/);
+});
+
 test('AI 的整段回答能按小节拆成标题、英文与中文', () => {
   const raw = [
     '### 英文标题',
@@ -1280,7 +1367,168 @@ test('译文缓存：迁移带过去、云同步取并集、命中就不联网',
   assert(/TR_CACHE_MAX/.test(src), '缓存要有上限，否则 localStorage 会被撑爆');
 });
 
-console.log('题目中文');
+console.log('译文缓存分键存放');
+test('缓存落在自己的键里，笔记键不再背着它', () => {
+  const r = run(`(function(){
+    localStorage.clear();
+    state = defaultState();
+    trCacheSet('hello', '你好');
+    writeStateNow();
+    var smallNotes = localStorage.getItem(STORE_KEY).length;
+    /* 再塞一条 5000 字符的缓存：笔记键的大小不该跟着变 */
+    trCacheSet('big', new Array(5000).join('y'));
+    writeStateNow();
+    var notes = JSON.parse(localStorage.getItem(STORE_KEY));
+    var cache = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return {
+      notesHasCache: Object.prototype.hasOwnProperty.call(notes, 'trCache'),
+      cacheHasIt: cache && cache.hello,
+      notesFlat: localStorage.getItem(STORE_KEY).length === smallNotes,
+      reloaded: loadState().trCache.hello
+    };
+  })()`);
+  assert.strictEqual(r.notesHasCache, false, '笔记键里不该再有 trCache，否则每次落盘都要序列化整份缓存');
+  assert.strictEqual(r.cacheHasIt, '你好', '缓存要落在自己的键里');
+  assert.strictEqual(r.notesFlat, true, '缓存长得再大，笔记键的大小都不该变');
+  assert.strictEqual(r.reloaded, '你好', '读盘时缓存要并回内存里的 state.trCache');
+});
+
+test('老数据里内联的缓存能迁出来；缓存写失败不能连累笔记', () => {
+  const r = run(`(function(){
+    localStorage.clear();
+    /* 0.7.1 的形状：缓存内联在笔记键里 */
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      version: 5, chunks: [{ id: 'c1', chunk: 'take off' }], trCache: { hello: '你好' }
+    }));
+    var st = loadState();
+    var loaded = st.trCache.hello;
+    state = st;
+    trCacheSet('world', '世界');
+    /* 模拟配额满：只让缓存键写失败，笔记键照常 */
+    var orig = localStorage.setItem;
+    localStorage.setItem = function(k, v){
+      if (k === CACHE_KEY){ var e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; }
+      return orig(k, v);
+    };
+    writeStateNow();
+    var raw = localStorage.getItem(STORE_KEY);
+    localStorage.setItem = orig;
+    return { loaded: loaded, notesChunks: raw ? JSON.parse(raw).chunks.length : -1, ok: storageOK };
+  })()`);
+  assert.strictEqual(r.loaded, '你好', '旧版内联的缓存读盘时要并回 state.trCache，不能丢');
+  assert.strictEqual(r.notesChunks, 1, '缓存写失败时笔记仍要写进去——这是分键的意义');
+  assert.strictEqual(r.ok, true, '别因为缓存写失败就把 storageOK 打成 false');
+});
+
+test('缓存超预算时从最老的开始删，不整块丢掉', () => {
+  const r = run(`(function(){
+    localStorage.clear();
+    state = defaultState();
+    for (var i = 0; i < 5000; i++) state.trCache['k' + i] = new Array(300).join('x');
+    writeStateNow();
+    var cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+    var keys = Object.keys(cache);
+    var total = 0;
+    keys.forEach(function(k){ total += k.length + cache[k].length; });
+    return { n: keys.length, total: total, hasNewest: !!cache.k4999, hasOldest: !!cache.k0 };
+  })()`);
+  assert(r.total <= 1200000, '落盘的缓存体积要在预算内，实际 ' + r.total);
+  assert.strictEqual(r.hasNewest, true, '最新的要留着');
+  assert.strictEqual(r.hasOldest, false, '最老的先被淘汰');
+  assert(r.n > 100, '只删超出预算的那部分，不是整块丢掉，实际剩 ' + r.n + ' 条');
+});
+
+/* 合并函数最容易出的不是「合错了」，而是「合完再合又变了」：两台设备各推一次，
+   云端值来回翻，用户看到词块的意思在闪。下面这组断言把代数性质钉住，
+   同时也是「宁可多留一条，也不悄悄删笔记」这条原则的可执行版本。 */
+test('mergeStates 的代数性质：幂等、交换、结合、吸收', () => {
+  run(`(function(){
+    function mk(over){ return migrate(Object.assign({ version: 5 }, over)); }
+    function sortById(list){
+      return (Array.isArray(list) ? list : []).slice()
+        .sort(function(x, y){ return String(x && x.id).localeCompare(String(y && y.id)); });
+    }
+    /* 顺序不算（chunks/customLessons 的先后是显示顺序，不是数据）；settings 也不算，
+       它按设计「以本机为准」，交换之后必然不同。其余字段一律参与比较。 */
+    globalThis._canon = function(s){
+      return stableStringify({
+        chunks: sortById(s.chunks), lessons: sortById(s.customLessons), trash: sortById(s.trash),
+        progress: s.progress, logs: s.logs, lessonEdits: s.lessonEdits, mistakes: s.mistakes,
+        trCache: s.trCache, deletedLessons: s.deletedLessons, deletedMistakes: s.deletedMistakes,
+        streak: s.streak, lastActive: s.lastActive
+      });
+    };
+    globalThis._a = mk({
+      chunks: [
+        { id: 'c1', chunk: 'take off', added: '2026-01-02', stage: 2 },
+        { id: 'c2', chunk: 'run out', meaning: '本机写法', added: '2026-01-01' }
+      ],
+      logs: { '2026-01-01': { inputDone: true, reviewed: 1 }, '2026-01-02': { outputDone: true, reviewed: 3 } },
+      streak: 3, lastActive: '2026-01-02', settings: { currentWeek: 2 },
+      progress: { A: { quiz: { 0: 1 }, cloze: { 2: 1 } } },
+      lessonEdits: { A: { chunkMeaning: { 'take off': '起飞' } } },
+      customLessons: [{ id: 'L1', title: '一', text: ['Hello there.'], textZh: ['你好。'] }],
+      mistakes: { 'A|take off': { wrong: 2, fixed: false, at: '2026-01-02' } },
+      trCache: { hello: '你好' }
+    });
+    globalThis._b = mk({
+      chunks: [
+        { id: 'c1', chunk: 'take off', added: '2026-01-02', stage: 5, mastered: true },
+        { id: 'c2', chunk: 'run out', meaning: '云端写法', added: '2026-01-01' },
+        { id: 'c3', chunk: 'give up', added: '2026-01-03' }
+      ],
+      logs: { '2026-01-02': { inputDone: true, reviewed: 9 } },
+      streak: 1, lastActive: '2026-01-03', settings: { currentWeek: 3 },
+      progress: { A: { quiz: { 1: 1 } }, B: { quiz: { 0: 1 } } },
+      mistakes: { 'A|take off': { wrong: 5, fixed: true, at: '2026-01-03' } },
+      trCache: { world: '世界' },
+      trash: [{ id: 'c4', chunk: 'drop by' }]
+    });
+    /* c 里有 c4（已被 b 的 trash 判死）与 L1（被 c 的 deletedLessons 判死）：
+       结合律测试要跨过墓碑，才能证明「删掉的东西不会从更深一层合并里复活」。 */
+    globalThis._c = mk({
+      chunks: [{ id: 'c4', chunk: 'drop by', added: '2026-01-04' }, { id: 'c5', chunk: 'look after' }],
+      deletedLessons: { L1: 1 }, trCache: { other: '别的' }
+    });
+    return true;
+  })()`);
+
+  /* 幂等要对着「合并自己的输出」比，而不是对着原始 state：mergeStates 会顺手把
+     logs / progress / lessonEdits 补成规范形状（outputDone:false、clozeRes:{} 这类），
+     第一次合并本来就该改形状，之后就不该再动。 */
+  const idem = run('({ once: _canon(mergeStates(_a, _a)), twice: _canon(mergeStates(mergeStates(_a, _a), _a)) })');
+  assert.strictEqual(idem.twice, idem.once, '幂等：合并过一遍之后再合一遍，结果必须一样');
+
+  const comm = run('({ ab: _canon(mergeStates(_a, _b)), ba: _canon(mergeStates(_b, _a)) })');
+  assert.strictEqual(comm.ab, comm.ba, '交换律：谁先发起同步，合并结果必须一样，否则云端会来回翻');
+
+  const assoc = run(
+    '({ left: _canon(mergeStates(mergeStates(_a, _b), _c)), right: _canon(mergeStates(_a, mergeStates(_b, _c))) })'
+  );
+  assert.strictEqual(assoc.left, assoc.right, '结合律：三次同步分两两合并的顺序不该影响结果');
+
+  const absorb = run('({ first: _canon(mergeStates(_a, _b)), again: _canon(mergeStates(mergeStates(_a, _b), _b)) })');
+  assert.strictEqual(absorb.again, absorb.first, '吸收律：合并完再合一遍云端，结果不该再变（防来回弹）');
+
+  const tombs = run(`(function(){
+    var m = mergeStates(_b, _c);
+    return {
+      hasC4: m.chunks.some(function(c){ return c.id === 'c4'; }),
+      hasL1: m.customLessons.some(function(l){ return l.id === 'L1'; }),
+      hasC5: m.chunks.some(function(c){ return c.id === 'c5'; })
+    };
+  })()`);
+  assert.strictEqual(tombs.hasC4, false, '被 trash 删掉的词块不能从另一端的合并里复活');
+  assert.strictEqual(tombs.hasL1, false, '被 deletedLessons 删掉的文章同理');
+  assert.strictEqual(tombs.hasC5, true, '但没被删的必须留下——「宁可多留一条，也不悄悄删笔记」');
+
+  const settings = run(
+    '({ localA: mergeStates(_a, _b).settings.currentWeek, localB: mergeStates(_b, _a).settings.currentWeek })'
+  );
+  assert.strictEqual(settings.localA, 2, '设置以本机为准：第一个参数是本机');
+  assert.strictEqual(settings.localB, 3, '反过来也以「本机」为准，这是设计，不是 bug');
+});
+
 test('解析里的中文只出现一次，不再整块重复', () => {
   const r = run(
     "(function(){ var lesson = allLessons()[0]; var q = lesson.quiz[0]; var html = buildQuizExplain(q, lesson, 0); var cloze = clozeResHtml({ before:'I', answer:'like', after:'apples.' }, true, { chunks: [] }, 0); return { html: html, cloze: cloze, zhCount: (html.match(/鸡蛋和吐司/g) || []).length }; })()"

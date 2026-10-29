@@ -1047,15 +1047,22 @@ function holdSentenceDots(text){
     .replace(SENT_DOT_WORD, '$1' + SENT_HOLD)
     .replace(SENT_DOT_DEC, '$1' + SENT_HOLD);
 }
+/* ========== 切句：英文、中文各只有一份规则 ==========
+   以前英文有「正则版」和「手写扫描版」两套（一套认缩写和小数、不认句末引号，另一套反过来），
+   中文也有两套（其中一套在后行断言里逐个切，会把整串「……」从中间切开）。
+   两套切出的句数会不一样，而 locateSentence / zhForSentence / 逐句高亮都靠句下标把英文句
+   对到中文句上：差一句就引用到别的句子，或者高亮串到隔壁去。
+   现在规则只有这两个正则，列表版（splitEnglishSentences）与保留位置版（splitEnSegments）
+   都从它们来，不再各写一套。
+   正则用「零个或多个非句末字符」开头：段落以标点开场（"...wait"）时那几个点也不会被丢掉。 */
+const EN_SENT_RE = /[^.!?]*[.!?]+["'”’)\]]?/g;
+const ZH_SENT_RE = /[^。！？!?…]*(?:[。！？!?]+|…+)["'”’]?/g;
 function splitEnglishSentences(text){
-  /* 不许给结果加 filter(Boolean)：空输入历来返回 []，加了会让调用方多拿到一段空串 */
-  return splitByRegex(holdSentenceDots(text), /[^.!?]+[.!?]+["'”’]?/g).map(s =>
-    s.split(SENT_HOLD).join('.')
-  );
+  /* 缩写（a.m. / U.S. / Mr.）和小数里的点先换成占位符，切完再换回来 */
+  return splitByRegex(holdSentenceDots(text), EN_SENT_RE).map(s => s.split(SENT_HOLD).join('.'));
 }
-
 function splitChineseSentences(text){
-  return splitByRegex(text, /[^。！？!?]+[。！？!?]+["'”’]?/g);
+  return splitByRegex(text, ZH_SENT_RE);
 }
 
 function alignSentences(en, zh){
@@ -1174,10 +1181,19 @@ async function stateTranslate(text){
 const STORE_KEY = 'ecChunksApp_v3';
 const OLD_KEY_V2 = 'ecChunksApp_v2';
 const OLD_KEY_V1 = 'ecChunksApp_v1';
+/* 译文缓存单独一个键（原来和笔记挤在 STORE_KEY 里）。
+   理由：缓存最多 3000 条 × 最多 1000 字符，整盘序列化能到 3MB 量级，和 5MB 配额同一量级；
+   一旦写满，先失败的是笔记——而丢缓存只是多联网一次，丢笔记是事故。分开之后两份数据各写各的，
+   缓存把配额撑爆也伤不到笔记。 */
+const CACHE_KEY = 'ecChunksCache_v1';
+/* 缓存体积预算（字符数）：约 2.4MB 的 UTF-16，给笔记留出其余空间 */
+const TR_CACHE_BUDGET = 1200000;
 /* 4 = 新增 state.mistakes（错题本）。旧版本的程序读不到这个字段，合并云端数据时会把错题本
    整段抹掉，所以版本号要抬上去——让旧版本走「数据比你新，先导出备份」的提示，而不是静默丢数据。
    5 = 新增 state.trCache（译文缓存）。同样理由：旧版读不到，云端整盘合并会把它清空，
-   等于每次启动都要重新联网翻译一遍。 */
+   等于每次启动都要重新联网翻译一遍。
+   （0.7.2 起 trCache 在落盘时搬到 CACHE_KEY，内存里仍是 state.trCache；旧数据里的内联缓存
+   读盘时并进 state.trCache，所以不需要再抬版本号。） */
 const DATA_VERSION = 5;
 let storageOK = true;
 
@@ -1244,6 +1260,18 @@ function migrate(obj){
   if (Number.isFinite(obj.version) && obj.version > DATA_VERSION) newerDataVersion = Number(obj.version);
   return { version: DATA_VERSION, chunks: Array.isArray(obj.chunks) ? obj.chunks.filter(Boolean).map(normalizeChunk) : [], logs: obj.logs && typeof obj.logs === 'object' ? obj.logs : {}, streak: Number.isFinite(obj.streak) ? obj.streak : 0, lastActive: obj.lastActive || null, settings: Object.assign({ currentWeek: 1 }, obj.settings || {}), customLessons: Array.isArray(obj.customLessons) ? obj.customLessons.filter(Boolean).map(normalizeLesson) : [], trash: Array.isArray(obj.trash) ? obj.trash.filter(Boolean).slice(0, 100) : [], progress: obj.progress && typeof obj.progress === 'object' ? obj.progress : {}, lessonEdits: obj.lessonEdits && typeof obj.lessonEdits === 'object' ? obj.lessonEdits : {}, mistakes: obj.mistakes && typeof obj.mistakes === 'object' ? obj.mistakes : {}, trCache: normalizeTrCache(obj.trCache), deletedLessons: obj.deletedLessons && typeof obj.deletedLessons === 'object' ? obj.deletedLessons : {}, deletedMistakes: obj.deletedMistakes && typeof obj.deletedMistakes === 'object' ? obj.deletedMistakes : {} };
 }
+/* 把落在 CACHE_KEY 里的译文缓存并回内存视图 state.trCache。
+   老版本把缓存内联写在笔记键里、新版本写在缓存键里，两台机器/两个版本可能各有一份，
+   所以按并集读：谁有就留谁，重复的键内容相同。 */
+function withSavedCache(st){
+  let saved = null;
+  try{
+    const raw = localStorage.getItem(CACHE_KEY);
+    saved = raw ? JSON.parse(raw) : null;
+  }catch(e){ saved = null; }
+  st.trCache = normalizeTrCache(Object.assign({}, st.trCache || {}, saved || {}));
+  return st;
+}
 function loadState(){
   const readKey = (k) => {
     try{
@@ -1252,7 +1280,7 @@ function loadState(){
     }catch(e){ console.warn('读取失败', k, e); return null; }
   };
   const cur = readKey(STORE_KEY);
-  if (cur) return cur;
+  if (cur) return withSavedCache(cur);
   /* 旧版本键：读出并迁移后立刻搬到新键、清掉旧键。
      原来的 || 链每次启动都优先读 v2/v1 的老数据，新写入落在新键上，
      用户看到的就是"改了没保存"。 */
@@ -1260,12 +1288,12 @@ function loadState(){
     const st = readKey(k);
     if (!st) continue;
     try{
-      localStorage.setItem(STORE_KEY, JSON.stringify(st));
+      localStorage.setItem(STORE_KEY, JSON.stringify(withoutTrCache(st)));
       localStorage.removeItem(k);
     }catch(e){}
-    return st;
+    return withSavedCache(st);
   }
-  return defaultState();
+  return withSavedCache(defaultState());
 }
 let state = loadState();
 function pruneLogs(){ const cutoff = addDays(todayStr(), -400); let n = 0; Object.keys(state.logs).forEach(d => { if (d < cutoff){ delete state.logs[d]; n++; } }); return n; }
@@ -1281,9 +1309,46 @@ let saveDirty = false;
 let lastSaveAt = 0;
 let saveSoonTimer = null;
 
+function withoutTrCache(s){
+  /* 浅拷贝后去掉缓存：笔记键要小，也不能让缓存把笔记挤出配额 */
+  const out = Object.assign({}, s);
+  delete out.trCache;
+  return out;
+}
+/* TR_CACHE_MAX 管条数，这里管体积——长句子能撑到「3000 条 × 1000 字符」的量级，
+   只限条数挡不住配额。超预算就从最老的开始删（对象属性顺序即插入顺序）。
+   顺便把内存里的 state.trCache 一起削小，之后的每次落盘都不用再重算。 */
+function trimTrCache(cache){
+  if (!cache || typeof cache !== 'object') return cache;
+  const keys = Object.keys(cache);
+  let total = 0;
+  keys.forEach(k => { total += k.length + String(cache[k]).length; });
+  for (let i = 0; total > TR_CACHE_BUDGET && i < keys.length; i++){
+    total -= keys[i].length + String(cache[keys[i]]).length;
+    delete cache[keys[i]];
+  }
+  return cache;
+}
+function writeTrCache(cache){
+  const obj = trimTrCache(cache || {});
+  let text;
+  try{ text = JSON.stringify(obj); }catch(e){ return; }
+  for (let attempt = 0; attempt < 2; attempt++){
+    try{ localStorage.setItem(CACHE_KEY, text); return; }
+    catch(e){
+      /* 写不进去（多半是配额满）：砍一半再试一次，还不行就放弃这一次。
+         缓存丢了只是多联网一次；笔记那条已经写成功了，不该被它连累。 */
+      const keys = Object.keys(obj);
+      if (!keys.length || attempt === 1) return;
+      for (let i = 0; i < Math.ceil(keys.length / 2); i++) delete obj[keys[i]];
+      try{ text = JSON.stringify(obj); }catch(_e){ return; }
+    }
+  }
+}
 function writeStateNow(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); storageOK = true; }
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(withoutTrCache(state))); storageOK = true; }
   catch(e){ if (storageOK) toast('本地存储不可用或已满'); storageOK = false; }
+  writeTrCache(state.trCache);
   lastSaveAt = Date.now();
   saveDirty = false;
   try{ scheduleCloudPush(); }catch(e){}
@@ -2139,21 +2204,36 @@ function highlightText(text, chunks){
   return html.replace(/\u0001(\d+)\u0001/g, (_, i) => `<mark class="hl">${marks[Number(i)]}</mark>`);
 }
 
-/* 分句并保留位置：用于「英文第 N 句 ↔ 中文第 N 句」的精确对齐 */
-const EN_SENT_RE = /[^.!?]+[.!?]+["'”’]?/g;
-const ZH_SENT_RE = /[^。！？!?]+[。！？!?]+["'”’]?/g;
+/* 分句并保留位置：用于「英文第 N 句 ↔ 中文第 N 句」的精确对齐。
+   规则与 splitEnglishSentences / splitChineseSentences 完全相同（同一个正则、同样先保护缩写里的点），
+   区别只在这里要 start/end。占位符与被它替换的句点等长，所以位置不会偏。 */
 function splitSegments(text, re){
   const src = String(text || '');
   const out = [];
   if (!src) return out;
   re.lastIndex = 0;
-  let m;
+  let m, last = 0;
   while ((m = re.exec(src)) !== null){
     if (m[0] === ''){ re.lastIndex++; continue; }
-    if (!m[0].trim()) continue;
+    if (!m[0].trim()){ last = m.index + m[0].length; continue; }
     out.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+    last = m.index + m[0].length;
   }
+  /* 最后一段没有句末标点时它不属于任何匹配，要单独补上——
+     列表版（splitByRegex）也是这么补的，两个版本必须给出同样的句子。 */
+  const tail = src.slice(last);
+  if (tail.trim()) out.push({ text: tail, start: last, end: src.length });
   return out;
+}
+function splitEnSegments(text){
+  return splitSegments(holdSentenceDots(text), EN_SENT_RE).map(seg => ({
+    text: seg.text.split(SENT_HOLD).join('.'),
+    start: seg.start,
+    end: seg.end
+  }));
+}
+function splitZhSegments(text){
+  return splitSegments(text, ZH_SENT_RE);
 }
 
 /* 逐句对齐后只在本句范围内高亮，避免整段串色（英文高亮了中文却标到别处） */
@@ -2161,8 +2241,8 @@ function highlightZhBySentence(zhText, enText, chunks){
   const zh = String(zhText || '');
   if (!zh) return '';
   if (!chunks || !chunks.length) return esc(zh);
-  const zhSegs = splitSegments(zh, ZH_SENT_RE);
-  const enSegs = splitSegments(String(enText || ''), EN_SENT_RE);
+  const zhSegs = splitZhSegments(zh);
+  const enSegs = splitEnSegments(enText);
   if (!zhSegs.length) return highlightZh(zh, chunks);
   const aligned = enSegs.length > 0 && enSegs.length === zhSegs.length;
   let html = '';
@@ -2189,8 +2269,8 @@ function exampleFor(c, lesson){
   const rawOk = /[A-Za-z]{2,}/.test(raw) && sentenceHasChunk(raw, chunk);
   const idx = text.findIndex(s => s && sentenceHasChunk(s, chunk));
   if (idx >= 0){
-    const enSegs = splitSegments(text[idx], EN_SENT_RE);
-    const zhSegs = splitSegments(textZh[idx] || '', ZH_SENT_RE);
+    const enSegs = splitEnSegments(text[idx]);
+    const zhSegs = splitZhSegments(textZh[idx] || '');
     const j = enSegs.findIndex(seg => sentenceHasChunk(seg.text, chunk));
     let en = j >= 0 ? enSegs[j].text.trim() : (rawOk ? raw : String(text[idx]).trim());
     let zh = '';
@@ -2226,8 +2306,8 @@ function snippetFromLesson(lesson, chunkText){
   for (let i = 0; i < text.length; i++){
     const en = String(text[i] || '');
     if (!sentenceHasChunk(en, chunk)) continue;
-    const enSegs = splitSegments(en, EN_SENT_RE);
-    const zhSegs = splitSegments(textZh[i] || '', ZH_SENT_RE);
+    const enSegs = splitEnSegments(en);
+    const zhSegs = splitZhSegments(textZh[i] || '');
     const j = enSegs.findIndex(seg => sentenceHasChunk(seg.text, chunk));
     if (j < 0) continue;
     const zh = (zhSegs.length === enSegs.length) ? zhSegs[j].text.trim() : String(textZh[i] || '').trim();
@@ -2407,23 +2487,15 @@ function renderLearn(){
    好在 textZh 与 text 是逐段、逐句一一对应的（33 段里 29 段句数完全相等），于是：
    先切句 → 找到这句在段里的下标 → 取中文段的同一句，就能白拿现成的人工翻译。
    这一步不联网，所以「解析里的原句中文」不用再点按钮。 */
+/* 切句只留一份实现在上面（splitEnglishSentences / splitChineseSentences），这两个名字是薄壳。
+   以前这里另写了一份手扫版，和上面那份规则不同（那份认缩写和小数、这份认句末引号），
+   同一段用两个函数切出的句数会不一样，而下面 locateSentence / zhForSentence 要靠句下标
+   把英文句对到中文句上——差一句就引用到别的句子。 */
 function splitEnSentences(text){
-  const s = String(text || '');
-  const out = [];
-  let buf = '';
-  for (let i = 0; i < s.length; i++){
-    buf += s[i];
-    if (s[i] === '.' || s[i] === '!' || s[i] === '?'){
-      /* 句末引号、右括号属于上一句（'"Hi." he said' 不该在引号后面断开） */
-      while (i + 1 < s.length && /["'”’)\]]/.test(s[i + 1])){ buf += s[++i]; }
-      out.push(buf.trim()); buf = '';
-    }
-  }
-  if (buf.trim()) out.push(buf.trim());
-  return out.filter(Boolean);
+  return splitEnglishSentences(text);
 }
 function splitZhSentences(text){
-  return String(text || '').split(/(?<=[。！？…])/).map(s => s.trim()).filter(Boolean);
+  return splitChineseSentences(text);
 }
 /* 比大小写、标点、空白：引用段落与原文的差别常常只有标点和空格 */
 function normEnKey(s){
@@ -4337,7 +4409,12 @@ function pickChunk(a, b){
   const la = String(a.lastReviewed || ''), lb = String(b.lastReviewed || '');
   if (la !== lb) return lb > la ? b : a;
   if (!a.mine && b.mine) return b;   // 同分时保留带自己备注的那条
-  return a;
+  if (a.mine && !b.mine) return a;
+  /* 分数、复习时间、有没有备注全一样时，必须有一个「与参数顺序无关」的裁决。
+     原来这里直接 return a，而 a 永远是「远端」那一条——于是谁先发起同步谁赢：
+     两台设备各推一次，这条词块的意思就在两个值之间来回翻（merge 不再幂等）。
+     改成比内容定序，两个方向都选出同一条。 */
+  return stableStringify(b) > stableStringify(a) ? b : a;
 }
 function lessonWeight(l){
   const text = Array.isArray(l.text) ? l.text.join(' ').length : 0;
@@ -4346,7 +4423,11 @@ function lessonWeight(l){
 }
 function pickLesson(a, b){
   if (!a || !b) return a || b;
-  return lessonWeight(b) > lessonWeight(a) ? b : a;
+  const wa = lessonWeight(a), wb = lessonWeight(b);
+  if (wb !== wa) return wb > wa ? b : a;
+  /* 同重（比如两边都是同一篇的两种改动）也要按内容定序，理由同 pickChunk：
+     返回 a 会让「谁先同步谁赢」，两台设备之间来回翻。 */
+  return stableStringify(b) > stableStringify(a) ? b : a;
 }
 function mergeStates(local, remote){
   const L = migrate(local || {}), R = migrate(remote || {});
@@ -5094,7 +5175,9 @@ function init(){
   bind(aiInput, 'keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); setAiSite(aiInput.value); } });
 
   bind('#btnExport', 'click', () => {
-    const payload = Object.assign({}, state, { exportedAt: new Date().toISOString() });
+    /* 备份里不带译文缓存：它是可再生的一次性数据，导入时也从来不读（见下面的按字段合并），
+       带上只会把备份文件从几十 KB 撑到几 MB。 */
+    const payload = Object.assign(withoutTrCache(state), { exportedAt: new Date().toISOString() });
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

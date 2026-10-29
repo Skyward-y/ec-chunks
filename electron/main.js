@@ -18,15 +18,29 @@ const http = require('http');
 // 表现是「双击后什么都没发生、也没有任何日志」。触发点是 GPU / 沙箱初始化。
 // 本应用是纯 DOM 界面，不需要 GPU 合成，所以直接关硬件加速 + GPU 沙箱——最稳且无副作用。
 // 必须在 app ready 之前调用。
+//
+// 这些开关不是无条件开的：默认关（这是被验证过能启动的那条路），但可以用环境变量把
+// 安全边界打开一次，用来验证新系统版本 / 新 Electron 是否已经修好那个崩溃：
+//   set EC_CHUNKS_SANDBOX=1 && 语境词块本.exe
+// 打开后不再关硬件加速，也不再关 GPU / 渲染器沙箱（webPreferences.sandbox 同步为 true）。
 // ---------------------------------------------------------------------------
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('disable-gpu-sandbox');
-// 更深一层：渲染进程本身在部分 Win11 26000+ 机器上会以 launch-failed 直接起不来，
-// 根因是渲染器沙箱 / 代码完整性校验（RendererCodeIntegrity）初始化失败。
-// 本应用只加载自己打包的本地页面、不执行外部代码，关掉渲染器沙箱无实际安全损失。
-app.commandLine.appendSwitch('no-sandbox');
-app.commandLine.appendSwitch('disable-renderer-sandbox');
-app.commandLine.appendSwitch('disable-features', 'RendererCodeIntegrity');
+function sandboxRequested() {
+  const v = String(process.env.EC_CHUNKS_SANDBOX || '')
+    .trim()
+    .toLowerCase();
+  return v === '1' || v === 'on' || v === 'true';
+}
+const USE_SANDBOX = sandboxRequested();
+if (!USE_SANDBOX) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+  // 更深一层：渲染进程本身在部分 Win11 26000+ 机器上会以 launch-failed 直接起不来，
+  // 根因是渲染器沙箱 / 代码完整性校验（RendererCodeIntegrity）初始化失败。
+  // 本应用只加载自己打包的本地页面、不执行外部代码，关掉渲染器沙箱无实际安全损失。
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-renderer-sandbox');
+  app.commandLine.appendSwitch('disable-features', 'RendererCodeIntegrity');
+}
 
 // 网页文件所在目录：开发时是仓库根目录，打包后在 app.asar 根目录（Electron 的 fs 同时支持普通路径与 asar 路径）
 const ROOT = path.join(__dirname, '..');
@@ -257,6 +271,7 @@ function startServer() {
 }
 
 async function createWindow() {
+  logLine('沙箱模式', { sandbox: USE_SANDBOX ? 'on（EC_CHUNKS_SANDBOX）' : 'off（默认，Win11 26000+ 兼容）' });
   win = new BrowserWindow({
     width: 1240,
     height: 860,
@@ -269,8 +284,8 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      // 与上面的 no-sandbox 对齐；开着沙箱时 Electron 会在部分机器上直接杀掉渲染进程
-      sandbox: false,
+      // 与上面的开关同步：EC_CHUNKS_SANDBOX=1 时才真开沙箱
+      sandbox: USE_SANDBOX,
       spellcheck: false
     }
   });
