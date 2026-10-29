@@ -1,6 +1,6 @@
 {
   "name": "ec-chunks",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "语境词块本 · 把整篇文章拆成词块来背的离线英语学习 App",
   "main": "electron/main.js",
   "author": "Skyward-y",

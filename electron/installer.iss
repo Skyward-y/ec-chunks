@@ -1,6 +1,6 @@
 ﻿; 语境词块本 - Inno Setup 安装脚本
 #define MyAppName "语境词块本"
-#define MyAppVersion "0.7.1"
+#define MyAppVersion "0.7.2"
 #define MyAppExeName "EcChunks.exe"
 
 [Setup]

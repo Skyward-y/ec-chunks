@@ -10,8 +10,8 @@
 
 | 版本 | 文件 | 大小 | 怎么用 |
 | :--: | --- | :--: | --- |
-| **安装版**<br>（推荐） | [`EcChunks-0.7.1-setup.exe`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.7.1/EcChunks-0.7.1-setup.exe) | 103 MB | 双击安装 → 桌面和开始菜单出现「语境词块本」 |
-| **免安装版** | [`EcChunks-v0.7.1-win64.zip`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.7.1/EcChunks-v0.7.1-win64.zip) | 140 MB | 解压 → 双击里面的 `EcChunks.exe` |
+| **安装版**<br>（推荐） | [`EcChunks-0.7.2-setup.exe`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.7.2/EcChunks-0.7.2-setup.exe) | 103 MB | 双击安装 → 桌面和开始菜单出现「语境词块本」 |
+| **免安装版** | [`EcChunks-v0.7.2-win64.zip`](https://github.com/Skyward-y/ec-chunks/releases/download/v0.7.2/EcChunks-v0.7.2-win64.zip) | 140 MB | 解压 → 双击里面的 `EcChunks.exe` |
 
 全部下载都在 [Releases](https://github.com/Skyward-y/ec-chunks/releases) 页面。
 
