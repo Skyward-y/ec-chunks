@@ -1,0 +1,48 @@
+name: check
+
+# 这个仓库没有任何 CI 的时候，出过两个只有用户才能发现的故障：
+# ① data/*.json 从没入库，干净克隆打包会没有离线词典、Pages 部署会让预缓存 404；
+# ② sw.js 的 CACHE_VERSION 忘了重算，改完的 app.js 在已装 PWA 上根本不生效。
+# 下面每一步都在拦这两类「本机能跑、别人克隆下来就坏」的问题。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    # 跑在 windows-latest：应用本身只发 Windows 版，打包脚本、安装器脚本、路径处理都按 Windows 写的，
+    # 换个平台跑绿了也不代表发出去的能装。
+    runs-on: windows-latest
+    env:
+      # 只跑 lint / 冒烟 / 格式化，不需要 Electron 二进制，省掉一百多 MB 下载
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 装依赖（严格按 package-lock.json）
+        run: npm ci
+
+      - name: 离线词典必须在库里
+        shell: bash
+        run: |
+          for f in data/dict.json data/lemma.json; do
+            test -f "$f" || { echo "缺少 $f：离线词典没入库，打出来的包没有词典"; exit 1; }
+          done
+          echo "词典就位：$(wc -c < data/dict.json) 字节 / $(wc -c < data/lemma.json) 字节"
+
+      - name: 语法检查 + 冒烟用例
+        run: npm run check
+
+      - name: 格式化
+        run: npm run format:check
+
+      - name: Service Worker 的缓存版本是最新的
+        run: node tools/stamp-sw.js --check

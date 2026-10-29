@@ -958,6 +958,19 @@ function addDays(dateStr, n){ const [y,m,d] = dateStr.split('-').map(Number); co
 function lastNDays(n){ const arr=[], base=todayStr(); for(let i=n-1;i>=0;i--) arr.push(addDays(base,-i)); return arr; }
 function shuffle(arr){ const a = arr.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+/* 调试日志开关：地址栏带 ?debug=1，或本机存过 ecChunksDebug=1。
+   有些 catch 必须闭嘴（失败很常见、且不影响使用，弹提示反而是噪音），但「云同步一直转圈」
+   这类问题恰恰只在那些分支里留得下痕迹。默认闭嘴，要查的时候打开就有话。 */
+const DEBUG_LOG = (function(){
+  try{
+    if (/[?&]debug=1\b/.test(String(location.search || ''))) return true;
+    return localStorage.getItem('ecChunksDebug') === '1';
+  }catch(e){ return false; }
+})();
+function debugLog(where, err){
+  if (!DEBUG_LOG) return;
+  try{ console.warn('[debug] ' + where, err); }catch(e){ /* 连 console 都没有就算了 */ }
+}
 let toastTimer = null;
 function toast(msg, action){
   const el = $('#toast');
@@ -1351,7 +1364,7 @@ function writeStateNow(){
   writeTrCache(state.trCache);
   lastSaveAt = Date.now();
   saveDirty = false;
-  try{ scheduleCloudPush(); }catch(e){}
+  try{ scheduleCloudPush(); }catch(e){ debugLog('writeStateNow：排云同步', e); }
 }
 
 function saveState(){
@@ -2287,6 +2300,19 @@ function exampleFor(c, lesson){
 }
 
 function isChunkCollected(chunk){ return state.chunks.some(c => c.chunk.toLowerCase() === chunk.toLowerCase()); }
+/* 词块本里所有条目转成小写后的集合。
+   卡片渲染时每条词块都要问一次「这个表达收过没有」，原来那是一遍 state.chunks 的线性扫描：
+   40 篇 × 11 词块 × 800 条词块本 = 35 万次比较（实测 28ms），60 篇 × 12 词块 × 2000 条 = 144 万次（99ms），
+   而 renderLearnList 每次收词块、切难度、搜索都会重跑。这里一次建好集合，查询 O(1)（同样场景 1ms）。
+   集合只在一次渲染内有效，不做缓存——省得去想「什么时候该失效」，那才是这类优化出错的地方。 */
+function collectedChunkKeys(){
+  const keys = new Set();
+  (state.chunks || []).forEach(c => {
+    const k = c && c.chunk ? String(c.chunk).toLowerCase() : '';
+    if (k) keys.add(k);
+  });
+  return keys;
+}
 function filterLessons(){
   const all = allLessons();
   if (learnState.level === 'custom') return all.filter(l => l.custom);
@@ -2427,11 +2453,12 @@ function renderLearnList(){
     grid.innerHTML = `<div class="empty" style="grid-column:1/-1;"><p class="big">${learnState.level === 'custom' ? '你还没有添加自己的文章' : '这里还没有内容'}</p><p class="sub">${learnState.level === 'custom' ? '点上面的「添加我的英文文章」' : '换一个难度试试'}</p></div>`;
     return;
   }
+  const collectedKeys = collectedChunkKeys();
   grid.innerHTML = list.map(l => {
     const lvClass = l.custom ? 'custom' : l.level;
     const lvText = l.custom ? '我的文章' : LEVEL_LABEL[l.level];
     const chunkCount = (l.chunks || []).length;
-    const gotCount = (l.chunks || []).filter(c => c && isChunkCollected(c.chunk)).length;
+    const gotCount = (l.chunks || []).filter(c => c && collectedKeys.has(String(c.chunk).toLowerCase())).length;
     const gotText = chunkCount ? `<span>已收 <b>${gotCount}</b> / ${chunkCount} 个词块</span>` : '<span>暂无词块</span>';
     const tools = l.custom ? `
       <div class="card-tools">
@@ -2745,8 +2772,9 @@ function renderParaBlocks(lesson, textZh){
 
 /* 重点词块列表：意思缺失给输入框，没收录给「收进词块本」 */
 function renderChunkRows(lesson){
+  const collectedKeys = collectedChunkKeys();
   const chunkRows = lesson.chunks.length ? lesson.chunks.map((c, i) => {
-    const collected = isChunkCollected(c.chunk);
+    const collected = collectedKeys.has(String(c.chunk).toLowerCase());
     const ex = exampleFor(c, lesson);
     /* 词性 / 多义 / 助记：内置文章查 CHUNK_META，AI 写的文章查 lesson.chunkNotes，
        两样都没有就只剩中文意思（不硬编造助记）。 */
@@ -4365,10 +4393,10 @@ function loadCloudCfg(){
   try{
     const raw = localStorage.getItem(CLOUD_KEY);
     if (raw) return Object.assign(base, JSON.parse(raw) || {});
-  }catch(e){}
+  }catch(e){ debugLog('读云同步配置', e); }
   return base;
 }
-function saveCloudCfg(){ try{ localStorage.setItem(CLOUD_KEY, JSON.stringify(cloudCfg)); }catch(e){} }
+function saveCloudCfg(){ try{ localStorage.setItem(CLOUD_KEY, JSON.stringify(cloudCfg)); }catch(e){ debugLog('写云同步配置', e); } }
 /* 同步失败要留痕迹：以前 cloudBootSync 直接 catch(e){}，用户只知道「没同步上」，
    不知道是 token 过期、网络不通还是 SQL 没建表。 */
 function setCloudError(e){
@@ -4875,31 +4903,35 @@ function boot(){
   }
 }
 
-function init(){
-  if (pruneLogs()) saveState();
-  if (newerDataVersion){
-    toast(`这份数据是更新版本的程序写的（v${newerDataVersion}），当前版本可能读不全。建议先导出一份备份。`);
-  }
+function showPage(name){
+  $$('.tab').forEach(t => {
+    const on = t.dataset.page === name;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+  if (name === 'today')  renderToday();
+  if (name === 'learn')  renderLearn();
+  if (name === 'chunks') renderChunks();
+  if (name === 'review') enterReview();
+  if (name === 'stats')  renderStats();
+  if (name === 'plan')   renderPlan();
+  if (name === 'mistakes') renderMistakes();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.showPage = showPage;
 
-  function showPage(name){
-    $$('.tab').forEach(t => {
-      const on = t.dataset.page === name;
-      t.classList.toggle('active', on);
-      t.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
-    if (name === 'today')  renderToday();
-    if (name === 'learn')  renderLearn();
-    if (name === 'chunks') renderChunks();
-    if (name === 'review') enterReview();
-    if (name === 'stats')  renderStats();
-    if (name === 'plan')   renderPlan();
-    if (name === 'mistakes') renderMistakes();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-  window.showPage = showPage;
+/* ---------------------------------------------------------------------------
+   init() 里按功能块拆出来的接线。原来这十几块全挤在一个 437 行的函数里，
+   只想找「导出按钮绑在哪」要翻半页；现在 init() 只剩按顺序调用它们 + 收尾渲染。
+   行为与拆分前一致——搬的是同一段代码，只是收进了具名函数。
+   --------------------------------------------------------------------------- */
+
+function bindTabs(){
   $$('.tab').forEach(tab => { tab.onclick = () => showPage(tab.dataset.page); });
+}
 
+function bindNavButtons(){
   bind('#btnAddToday', 'click', () => openModal());
   bind('#btnAddChunks', 'click', () => openModal());
   bind('#btnGoLearn', 'click', () => showPage('learn'));
@@ -4907,6 +4939,9 @@ function init(){
 
   /* 文章卡片：原来是内联 onclick/onkeydown，CSP 只允许 'self' 脚本后那一整片会失效，
      改成事件委托。编辑/删除按钮嵌在卡片里，所以先判按钮再判卡片。 */
+}
+
+function bindLessonListEvents(){
   const lessonGrid = $('#lessonGrid');
   if (lessonGrid) {
     lessonGrid.addEventListener('click', e => {
@@ -4930,7 +4965,9 @@ function init(){
     learnState.level = b.dataset.level;
     renderLearnList();
   });
+}
 
+function bindLearnPageEvents(){
   bind('#btnAddArticle', 'click', () => openArticleModal());
 
   /* 按等级 + 进度生成复习短文（只用现有语料，不联网） */
@@ -4943,6 +4980,9 @@ function init(){
   bindGlobalSelection();
 
   /* 「让 AI 写一篇」：提示词随难度/主题变化，点复制即可粘给任意 AI */
+}
+
+function bindPromptPanel(){
   bind('#btnCopyPrompt', 'click', async () => {
     refreshAiPrompt();
     const box = $('#aPrompt');
@@ -4993,6 +5033,9 @@ function init(){
   bind('#aTextZh', 'input', updateAlignNote);
 
   /* 保存文章 */
+}
+
+function bindArticleForm(){
   bind('#articleForm', 'submit', async e => {
     e.preventDefault();
     const id = $('#aId').value;
@@ -5093,7 +5136,9 @@ function init(){
   bind('#articleClose', 'click', closeArticleModal);
   bind('#articleCancel', 'click', closeArticleModal);
   bind('#articleModal', 'click', e => { if (e.target.id === 'articleModal') closeArticleModal(); });
+}
 
+function bindChecklist(){
   function toggleManual(li){
     const id = li.dataset.check; const log = ensureLog();
     if (id === 'input')  log.inputDone  = !log.inputDone;
@@ -5105,7 +5150,9 @@ function init(){
     const li = e.target.closest('li.manual'); if (!li) return;
     if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); toggleManual(li); }
   });
+}
 
+function bindChunkForm(){
   bind('#chunkForm', 'submit', e => {
     e.preventDefault();
     const id = $('#fId').value;
@@ -5130,7 +5177,9 @@ function init(){
   bind('#modalClose', 'click', closeModal);
   bind('#modalCancel', 'click', closeModal);
   bind('#modal', 'click', e => { if (e.target.id === 'modal') closeModal(); });
+}
 
+function bindChunkPage(){
   let searchTimer = null;
   bind('#searchBox', 'input', e => {
     /* 立刻取值，不在定时器里读事件对象 */
@@ -5164,7 +5213,9 @@ function init(){
     if (editBtn){ const c = state.chunks.find(x => x.id === editBtn.dataset.edit); if (c) openModal(c); }
     if (delBtn) deleteChunk(delBtn.dataset.del);
   });
+}
 
+function bindPlanPanel(){
   bind('#weekSelect', 'change', e => { state.settings.currentWeek = Number(e.target.value); saveState(); renderPlan(); });
 
   /* 问 AI 的站点：下拉选一个就存；自己填的网址点「保存」（也支持回车） */
@@ -5173,7 +5224,9 @@ function init(){
   bind('#btnSaveAiSite', 'click', () => setAiSite($('#aiSiteUrl').value));
   const aiInput = $('#aiSiteUrl');
   bind(aiInput, 'keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); setAiSite(aiInput.value); } });
+}
 
+function bindBackupEvents(){
   bind('#btnExport', 'click', () => {
     /* 备份里不带译文缓存：它是可再生的一次性数据，导入时也从来不读（见下面的按字段合并），
        带上只会把备份文件从几十 KB 撑到几 MB。 */
@@ -5240,7 +5293,9 @@ function init(){
     };
     reader.readAsText(file);
   });
+}
 
+function bindResetButton(){
   bind('#btnReset', 'click', () => {
     if (!confirm('确定清空全部词块、记录和自定义文章吗？此操作不可恢复。')) return;
     if (!confirm('再确认一次：真的要清空吗？')) return;
@@ -5249,7 +5304,9 @@ function init(){
     learnState = { level:'all', lessonId:null, quizAnswers:{}, clozeValues:{}, clozeResults:{}, showTrans:false };
     renderAll(); renderPlan(); renderLearn(); toast('已清空');
   });
+}
 
+function bindGlobalShortcuts(){
   document.addEventListener('mousedown', e => {
     const sp = $('#selPopup');
     if (sp && !sp.hidden && !sp.contains(e.target)) hideSelPopup();
@@ -5288,6 +5345,9 @@ function init(){
     e.preventDefault(); e.stopPropagation();
     speak(b.dataset.speak, b.dataset.lang);
   });
+}
+
+function bindLifecycleFlush(){
   if (window.speechSynthesis){
     try{
       pickEnVoice();
@@ -5300,6 +5360,30 @@ function init(){
     window.addEventListener('pagehide', flushSave);
     window.addEventListener('beforeunload', flushSave);
   }catch(e){}
+}
+
+function init(){
+  if (pruneLogs()) saveState();
+  if (newerDataVersion){
+    toast(`这份数据是更新版本的程序写的（v${newerDataVersion}），当前版本可能读不全。建议先导出一份备份。`);
+  }
+
+  /* 先接线、再渲染。每块都是下面一个 bind*()：缺元素只记账、不抛错，
+     一个 id 改错不再让整页失灵。 */
+  bindTabs();            // 顶部标签页与 showPage
+  bindNavButtons();      // 首页四个大按钮
+  bindLessonListEvents();// 文章卡片（事件委托）与难度筛选
+  bindLearnPageEvents(); // 我的文章 / 生成短文 / 错题筛选 / 划词
+  bindPromptPanel();     // 「让 AI 写一篇」的提示词与逐句翻译
+  bindArticleForm();     // 添加/编辑文章的弹窗
+  bindChecklist();       // 首页两个手打勾选项
+  bindChunkForm();       // 手动加词块的弹窗
+  bindChunkPage();       // 词块本的搜索、筛选、多选删除
+  bindPlanPanel();       // 周计划与「问 AI」的站点
+  bindBackupEvents();    // 导出 / 导入 / CSV / Anki
+  bindResetButton();     // 清空全部数据
+  bindGlobalShortcuts(); // Esc、复习快捷键、全站朗读
+  bindLifecycleFlush();  // 切后台/关窗前的补落盘
 
   renderAll(); renderPlan(); renderLearn();
   maybeNagBackup();

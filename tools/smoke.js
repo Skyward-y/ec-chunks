@@ -145,7 +145,12 @@ function loadApp(opts) {
     confirm: () => true,
     alert() {},
     Blob: function () {},
-    location: { href: 'http://localhost/', origin: 'http://localhost', protocol: opts.protocol || 'http:' },
+    location: {
+      href: 'http://localhost/',
+      search: opts.search || '',
+      origin: 'http://localhost',
+      protocol: opts.protocol || 'http:'
+    },
     navigator: { userAgent: 'node', language: 'zh-CN', onLine: true },
     speechSynthesis: { speak() {}, cancel() {} },
     SpeechSynthesisUtterance: function () {},
@@ -563,6 +568,52 @@ test('分句：缩写和小数里的句点不当句末（a.m. / U.S. / 3.50）',
   assert.strictEqual(split('Wait... what? Really!'), 'Wait... | what? | Really!', '省略号和问号感叹号照旧切开');
   assert.strictEqual(a.run("splitEnglishSentences('').length"), 0, '空输入仍然返回空数组');
   assert.strictEqual(split('No dot at all'), 'No dot at all', '没有句点就整段当一句');
+});
+
+test('调试日志默认闭嘴，?debug=1 才说话', () => {
+  const quiet = run(`(function(){
+    var warns = [];
+    var realWarn = console.warn;
+    console.warn = function(){ warns.push(Array.prototype.join.call(arguments, ' ')); };
+    try{
+      debugLog('测试', new Error('x'));
+      saveCloudCfg();
+      return { isDebug: DEBUG_LOG, n: warns.length };
+    } finally { console.warn = realWarn; }
+  })()`);
+  assert.strictEqual(quiet.isDebug, false, '没开开关时必须闭嘴，否则控制台全是噪音');
+  assert.strictEqual(quiet.n, 0);
+
+  const loud = loadApp({ search: '?debug=1' });
+  const r2 = loud.run(`(function(){
+    var warns = [];
+    var realWarn = console.warn;
+    console.warn = function(){ warns.push(Array.prototype.join.call(arguments, ' ')); };
+    try{
+      debugLog('读云同步配置', new Error('boom'));
+      return { isDebug: DEBUG_LOG, n: warns.length, text: warns[0] || '' };
+    } finally { console.warn = realWarn; }
+  })()`);
+  assert.strictEqual(r2.isDebug, true, '?debug=1 要能打开开关');
+  assert.strictEqual(r2.n, 1);
+  assert.match(r2.text, /\[debug\] 读云同步配置/, '日志要带上出事的环节名');
+});
+
+test('词块「收过没有」用集合查，不再逐条扫词块本', () => {
+  const r = run(`(function(){
+    var lesson = allLessons()[0];
+    var first = lesson.chunks[0];
+    state.chunks = [{ chunk: first.chunk.toUpperCase(), meaning: 'x' }];
+    var scans = 0;
+    state.chunks.some = function(){ scans++; return Array.prototype.some.apply(this, arguments); };
+    var rows = renderChunkRows(lesson);
+    var afterRows = scans;
+    renderLearnList();
+    return { scansRows: afterRows, scansList: scans, marked: rows.indexOf('已收录') >= 0 };
+  })()`);
+  assert.strictEqual(r.marked, true, '词块本里已经收过的表达，按钮应该是「已收录」');
+  assert.strictEqual(r.scansRows, 0, 'renderChunkRows 不该再对每张卡片线性扫描一遍词块本');
+  assert.strictEqual(r.scansList, 0, 'renderLearnList 不该再对每张卡片线性扫描一遍词块本');
 });
 
 test('切句只有一套规则：列表版与保留位置版给出同样的句子', () => {
@@ -1153,14 +1204,45 @@ test('init 里不再裸取元素：缺 id 只提示、不中断整页', () => {
      TypeError，后面的接线、renderAll()、定时器全都不执行，表现成「能打开但按钮全哑」。
      现在统一走 bind()：元素不在只记一条，启动后给一句可关闭的提示。 */
   const initBody = src.slice(src.indexOf('function init(){'));
-  assert.ok(initBody.length > 10000, 'init() 要从源码里切出来');
-  assert.ok(!/\$\('#[\w-]+'\)\.onclick\s*=/.test(initBody), 'init 里不该再有裸的 onclick 赋值');
-  assert.ok(!/\$\('#[\w-]+'\)\.addEventListener\(/.test(initBody), 'init 里不该再对 $() 的返回值直接 addEventListener');
+  assert.ok(initBody.length > 500, 'init() 要从源码里切出来');
+  /* 接线本身已经按功能块拆到 bind*() 里了（见下面那条用例），所以「不许裸取元素」这条
+     要查从第一块接线到文件末尾的整段，而不是只看 init 的函数体。 */
+  const wiring = src.slice(src.indexOf('init() 里按功能块拆出来的接线'));
+  assert.ok(wiring.length > 10000, '要能切出接线那一段');
+  assert.ok(!/\$\('#[\w-]+'\)\.onclick\s*=/.test(wiring), '接线里不该再有裸的 onclick 赋值');
+  assert.ok(!/\$\('#[\w-]+'\)\.addEventListener\(/.test(wiring), '接线里不该再对 $() 的返回值直接 addEventListener');
   assert.ok(/function bind\(target, evt, fn\)\{/.test(src), '要有 bind() 帮助函数');
   assert.ok(
     /if \(!el\)\{ if \(typeof target === 'string'\) bindMisses\.push\(target\); return null; \}/.test(src),
     'bind 缺元素时只记账、不抛错'
   );
+});
+
+test('init() 只负责按顺序调用接线块，不再是一个 400 多行的函数', () => {
+  const start = src.indexOf('function init(){');
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  assert.ok(start > 0 && end > start, '要能切出 init() 的完整函数体');
+  const body = src.slice(start, end);
+  const lines = body.split('\n').length;
+  assert.ok(lines < 80, 'init() 又长回去了（现在 ' + lines + ' 行）：该拆的接线请拆到 bind*() 里');
+  const calls = body.match(/^ {2}bind[A-Z]\w*\(\);/gm) || [];
+  assert.ok(calls.length >= 12, 'init() 里应该是一串接线调用，实际只有 ' + calls.length + ' 个：' + calls.join(' '));
+  /* 拆出去的那几块必须真的被调用，不能拆完忘了接 */
+  ['bindTabs', 'bindLessonListEvents', 'bindPromptPanel', 'bindArticleForm', 'bindBackupEvents'].forEach((name) => {
+    assert.ok(new RegExp('^ {2}' + name + '\\(\\);', 'm').test(body), 'init() 里漏了 ' + name + '()');
+    assert.ok(new RegExp('function ' + name + '\\(\\)\\{').test(src), '找不到 ' + name + ' 的定义');
+  });
 });
 
 test('启动走带兜底的 boot()，失败要在界面上说得清', () => {
