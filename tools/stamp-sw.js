@@ -31,12 +31,22 @@ const ASSETS = [
   'data/lemma.json'
 ];
 
+/* 按「内容」而不是「字节」算指纹：Windows 上 core.autocrlf=true 的克隆会把同样的文件
+ * 检出成 CRLF，直接哈希字节会让本机和 Linux/CI 算出两个指纹，--check 必然互相打架
+ * （而且换了行尾就会让所有老用户的缓存失效一次）。所以先把 CRLF 归一成 LF 再哈希。 */
+function readNormalized(p) {
+  if (!fs.existsSync(p)) return Buffer.alloc(0);
+  const buf = fs.readFileSync(p);
+  /* 二进制资源（图标等）原样参与哈希；含 NUL 的一律当二进制，不做行尾归一 */
+  if (buf.includes(0)) return buf;
+  return Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+}
+
 function contentHash() {
   const h = crypto.createHash('sha256');
   for (const f of ASSETS) {
-    const p = path.join(root, f);
     h.update(f + ':');
-    h.update(fs.existsSync(p) ? fs.readFileSync(p) : Buffer.alloc(0));
+    h.update(readNormalized(path.join(root, f)));
     h.update('\n');
   }
   return h.digest('hex').slice(0, 10);
