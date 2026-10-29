@@ -9,6 +9,12 @@
  */
 /* ========== 内置材料（保持原样） ========== */
 const LEVEL_LABEL = { beginner:'初级', intermediate:'中级', advanced:'高级' };
+/* 难度标准：提示词里只给当前等级那一条。三段并列会让模型分心，还白占一百多字 */
+const LEVEL_STANDARD = {
+  beginner:'词汇量约 1000 词以内，句子短（8–15 词），以一般现在时和一般过去时为主，内容贴近日常生活。',
+  intermediate:'词汇量约 2000–3000 词，句子中等长度，可出现复合句和常见时态混合，内容涉及兴趣、学习、工作、观点。',
+  advanced:'词汇量 4000 以上，句子结构多样，可出现抽象话题、论证、科普，但每句仍需独立成句，不要写超长从句堆叠。'
+};
 const LESSONS = [
   { id:'b1', level:'beginner', topic:'日常生活', title:'A Morning Routine', titleZh:'晨间习惯', minutes:4,
     text:[
@@ -267,8 +273,677 @@ const CHUNK_GLOSSARY = {
   "a sense of achievement":"成就感","to-do list":"待办清单","out of breath":"上气不接下气","in the end":"最终","in other words":"换句话说","at first":"起初","at least":"至少","at once":"立刻","by chance":"偶然","for example":"例如","in fact":"事实上","in front of":"在……前面","in general":"通常","in order to":"为了","on purpose":"故意","on time":"准时","right away":"立刻","so far":"到目前为止","as well":"也","at all":"根本","at last":"最后","in addition":"此外","in advance":"提前","in charge of":"负责","in common":"共同","in danger":"处于危险中","in detail":"详细地","in need":"需要","in public":"公开地","in return":"作为回报","in short":"简而言之","in time":"及时","in trouble":"有麻烦","of course":"当然","on average":"平均","on foot":"步行","on sale":"出售","on the other hand":"另一方面","on the way":"在路上","out of date":"过时","out of order":"出故障","out of work":"失业","up to date":"最新的","as a result":"结果","as usual":"像往常一样","at the same time":"同时","by the way":"顺便说","first of all":"首先","in my opinion":"我认为","no longer":"不再","to be honest":"老实说","what's more":"而且",
   "make a decision":"做决定","make a difference":"有影响","make a living":"谋生","make a mistake":"犯错","make friends":"交朋友","make money":"赚钱","make sense":"有意义","make sure":"确保","take a break":"休息","take a look":"看一看","take a walk":"散步","take action":"行动","take care":"保重","take place":"发生","take part in":"参加","take pride in":"以……为荣","take time":"花时间","pay attention to":"注意","get in touch":"联系","keep in touch":"保持联系","keep calm":"保持冷静","keep quiet":"保持安静","keep a promise":"信守承诺","lose weight":"减肥","catch a cold":"感冒","have fun":"玩得开心","have to":"必须","used to":"过去常常","can't help it":"忍不住","can't help":"忍不住",
   "be aware of":"意识到","be fond of":"喜欢","be good at":"擅长","be interested in":"对……感兴趣","be proud of":"自豪","be ready for":"准备好","be responsible for":"负责","be similar to":"相似","be used to":"习惯","be afraid of":"害怕","be busy with":"忙于","be different from":"不同","be famous for":"著名","be full of":"充满","be known for":"闻名","be short of":"缺少","be sure about":"确定","be tired of":"厌倦","be worried about":"担心",
-  "constantly":"不断地","talented":"有天赋","overnight":"一夜之间","consistency":"坚持","steady":"稳定","regret":"后悔","willpower":"意志力","stubborn":"顽固","cumulative":"累积","anticipation":"期待","intertwined":"交织","reinforced":"强化","spontaneous":"自发","intentional":"有意","thrive":"茁壮成长","reclaim":"重新获得","interruptions":"打扰","disconnect":"断开连接","smells of":"有……的气味","says to herself":"自言自语","looking back":"回顾","starts somewhere":"从某处起步","that was the point":"这正是关键","get you there":"让你达到目标","the evidence is mixed":"证据不一","unwritten rules":"潜规则","neural pathways":"神经通路","driven by":"由……驱动","rather than":"而不是","triggered by":"由……触发","set a goal":"设定目标","find an excuse":"找借口","compare myself to":"跟……比较","add up to":"加起来达到","sign up for":"报名参加","care about":"在意","feel like":"想要","remind myself":"提醒自己","brush my teeth":"刷牙","make breakfast":"做早餐","get dressed":"穿好衣服","point to":"指出","warn of":"警告","spark new ideas":"激发新想法","the boundary dissolves":"界限消失","previously unimaginable":"以前难以想象","unfold automatically":"自动展开"
+  "alarm rings":"闹钟响","quiet hour":"安静的一小时","best part":"最好的部分","constantly":"不断地","talented":"有天赋","overnight":"一夜之间","consistency":"坚持","steady":"稳定","regret":"后悔","willpower":"意志力","stubborn":"顽固","cumulative":"累积","anticipation":"期待","intertwined":"交织","reinforced":"强化","spontaneous":"自发","intentional":"有意","thrive":"茁壮成长","reclaim":"重新获得","interruptions":"打扰","disconnect":"断开连接","smells of":"有……的气味","says to herself":"自言自语","looking back":"回顾","starts somewhere":"从某处起步","that was the point":"这正是关键","get you there":"让你达到目标","the evidence is mixed":"证据不一","unwritten rules":"潜规则","neural pathways":"神经通路","driven by":"由……驱动","rather than":"而不是","triggered by":"由……触发","set a goal":"设定目标","find an excuse":"找借口","compare myself to":"跟……比较","add up to":"加起来达到","sign up for":"报名参加","care about":"在意","feel like":"想要","remind myself":"提醒自己","brush my teeth":"刷牙","make breakfast":"做早餐","get dressed":"穿好衣服","point to":"指出","warn of":"警告","spark new ideas":"激发新想法","the boundary dissolves":"界限消失","previously unimaginable":"以前难以想象","unfold automatically":"自动展开"
 };
+
+/* ========== 词块的三样附加信息：词性 / 多义 / 助记 ==========
+   卡片上只写「中文意思」太薄：同一个短语可能是 v.+n.，也可能有第二个常见义，还缺一个记它的钩子。
+   这里给内置文章里的每个词块写死一份（共 67 条）：pos 词性、senses 除卡片意思之外的常见义、mnemonic 助记。
+   AI 写出来的文章走另一条路：提示词里要求 AI 按格式输出「词块（词性）：意思；意思｜助记：…」，
+   粘贴回来时解析成 lesson.chunkNotes，两边查同一份渲染逻辑（见 chunkMeta）。 */
+const CHUNK_META = {
+  "wake up": { pos: "v. phr.", senses: ["叫醒（别人）"], mnemonic: "wake 醒 + up 起来：眼帘一起就醒" },
+  "get up": { pos: "v. phr.", senses: ["（从座位上）站起来"], mnemonic: "get 得到 + up 向上：把身子从床上拿起来" },
+  "brush my teeth": { pos: "v.+n.", senses: [], mnemonic: "brush 是刷子：拿刷子把牙刷一遍" },
+  "make breakfast": { pos: "v.+n.", senses: [], mnemonic: "make 是做出来：把早餐做出来" },
+  "can't help it": { pos: "v. phr.", senses: ["忍不住做某事（can't help doing）"], mnemonic: "help 不只「帮助」，还作「阻止」：拦不住自己" },
+  "get dressed": { pos: "v. phr.", senses: [], mnemonic: "get + dressed（穿好的状态）：让自己进入穿着状态" },
+  "it takes me": { pos: "phr.", senses: ["需要（It takes time）"], mnemonic: "主语用 It：那件事花掉我的时间" },
+  "to-do list": { pos: "n.", senses: [], mnemonic: "to-do 要去做 + list 清单：要做的排成单" },
+  "smells of": { pos: "v. phr.", senses: [], mnemonic: "smell of + 东西：身上带着那东西的味儿" },
+  "what can i get for you?": { pos: "phr.", senses: [], mnemonic: "店员问：我能给你拿点什么" },
+  "can i have": { pos: "phr.", senses: [], mnemonic: "点单万能句：我能有…吗" },
+  "i'll take": { pos: "phr.", senses: [], mnemonic: "决定买下 = 把它拿走" },
+  "how much is that?": { pos: "phr.", senses: [], mnemonic: "问价：那个有多少（钱）" },
+  "pay with her card": { pos: "v. phr.", senses: ["付钱给某人（pay sb）"], mnemonic: "pay with + 工具：用卡来付" },
+  "for the first time": { pos: "prep. phr.", senses: [], mnemonic: "for the first time 头一回；at first 是「一开始」" },
+  "says to herself": { pos: "v. phr.", senses: ["心里想（say to oneself）"], mnemonic: "对自己说 → 就成了自言自语" },
+  "out of breath": { pos: "prep. phr.", senses: [], mnemonic: "out of + 名词：气都跑出去了" },
+  "constantly": { pos: "adv.", senses: [], mnemonic: "constant 持续 + ly：一直地" },
+  "say no": { pos: "v. phr.", senses: ["拒绝（say no to sth）"], mnemonic: "嘴上说 no 就是拒绝" },
+  "a sense of achievement": { pos: "n. phr.", senses: [], mnemonic: "sense 感觉 + achievement 成就" },
+  "give up": { pos: "v. phr.", senses: ["对…不再抱希望（give up on sb）"], mnemonic: "give 交出 + up 向上：举手把东西交出去" },
+  "keep going": { pos: "v. phr.", senses: [], mnemonic: "keep 保持 + going 走：一直在走" },
+  "care about": { pos: "v. phr.", senses: ["照顾、喜欢（care for）"], mnemonic: "care 关心 + about 关于：心上挂着这事" },
+  "get used to": { pos: "v. phr.", senses: [], mnemonic: "used 是用惯了：用久了就习惯；别和 used to do（过去常常）混" },
+  "sign up for": { pos: "v. phr.", senses: [], mnemonic: "签下名字 = 报名" },
+  "feel like": { pos: "v. phr.", senses: ["摸起来像（feel like silk）"], mnemonic: "感觉像 → 心里想要" },
+  "remind myself": { pos: "v. phr.", senses: ["使想起（remind sb of sth）"], mnemonic: "re（再）+ mind（心/想）：再想一遍" },
+  "regret": { pos: "v. / n.", senses: ["遗憾（regret to say）"], mnemonic: "re + gret：回头想哭" },
+  "keep a promise": { pos: "v.+n.", senses: [], mnemonic: "把承诺留住、不撒手" },
+  "find an excuse": { pos: "v.+n.", senses: ["原谅（动词，读 /ɪkˈskjuːz/）"], mnemonic: "找出一条理由，把自己摘出去" },
+  "talented": { pos: "adj.", senses: [], mnemonic: "talent + ed：带着天赋" },
+  "set a goal": { pos: "v.+n.", senses: [], mnemonic: "set 是放定：把目标钉在那" },
+  "that was the point": { pos: "phr.", senses: ["得分、观点（point 作名词）"], mnemonic: "point 指尖处：戳中的那一点" },
+  "overnight": { pos: "adv. / adj.", senses: ["过夜的（an overnight stay）"], mnemonic: "over 越过 + night 夜：一夜跨过去" },
+  "compare myself to": { pos: "v. phr.", senses: [], mnemonic: "compare 并列对照：把自己摆到别人旁边" },
+  "starts somewhere": { pos: "phr.", senses: [], mnemonic: "somewhere 总有个起点" },
+  "looking back": { pos: "phr.", senses: [], mnemonic: "回头看 = 回顾" },
+  "add up to": { pos: "v. phr.", senses: ["（it adds up）说得通"], mnemonic: "一点点加，最后凑成那个数" },
+  "consistency": { pos: "n.", senses: [], mnemonic: "consist 组成 + ency：始终如一" },
+  "steady": { pos: "adj. / v.", senses: ["使稳住（动词）"], mnemonic: "站得稳（steady）：别晃" },
+  "get you there": { pos: "phr.", senses: [], mnemonic: "把你送到那儿 = 帮你到达" },
+  "driven by": { pos: "v. phr.", senses: ["驱动力（drive 作名词）"], mnemonic: "被…推着走" },
+  "rather than": { pos: "conj.", senses: [], mnemonic: "宁可这个（rather），而不是那个" },
+  "unfold automatically": { pos: "v.+adv.", senses: [], mnemonic: "un（打开）+ fold（折）：折的东西自己摊开" },
+  "triggered by": { pos: "v. phr.", senses: ["扳机（trigger 作名词）"], mnemonic: "扣扳机：一碰就启动" },
+  "intertwined": { pos: "adj.", senses: [], mnemonic: "inter 相互 + twine 缠：两股绳互相缠住" },
+  "anticipation": { pos: "n.", senses: [], mnemonic: "ante 在前 + cip 拿：提前把好事拿到心里" },
+  "neural pathways": { pos: "n. phr.", senses: [], mnemonic: "神经走出来的小路，走多了就宽" },
+  "reinforced": { pos: "adj. / v.", senses: [], mnemonic: "re + in + force 加力：再加一次" },
+  "willpower": { pos: "n.", senses: [], mnemonic: "意志 + 力量，合成一个词" },
+  "stubborn": { pos: "adj.", senses: [], mnemonic: "犟得像石头，推不动" },
+  "cumulative": { pos: "adj.", senses: [], mnemonic: "cumul 堆 + ative：一点点堆起来" },
+  "in other words": { pos: "phr.", senses: [], mnemonic: "换一套词再说一遍" },
+  "point to": { pos: "v. phr.", senses: ["表明（证据指向某个结论）"], mnemonic: "手指朝那边 = 指向、指出" },
+  "reclaim": { pos: "v.", senses: ["取回（reclaim your baggage）"], mnemonic: "re 再 + claim 要：再要回来" },
+  "interruptions": { pos: "n.", senses: [], mnemonic: "inter 中间 + rupt 断：从中间掐断" },
+  "previously unimaginable": { pos: "adj. phr.", senses: [], mnemonic: "previously 以前 + 想不到的" },
+  "warn of": { pos: "v. phr.", senses: [], mnemonic: "warn 提醒 + of 关于某事" },
+  "disconnect": { pos: "v. / n.", senses: ["脱节（名词：a disconnect）"], mnemonic: "dis 分开 + connect 连：把线拔掉" },
+  "the boundary dissolves": { pos: "phr.", senses: ["解散（议会 dissolve）"], mnemonic: "界线像糖一样化掉" },
+  "spark new ideas": { pos: "v.+n.", senses: ["引发（spark a debate）"], mnemonic: "打个火花，想法就点着" },
+  "unwritten rules": { pos: "adj.+n.", senses: [], mnemonic: "没写下来的规矩" },
+  "spontaneous": { pos: "adj.", senses: [], mnemonic: "自己（spont）就冒出来" },
+  "the evidence is mixed": { pos: "phr.", senses: ["感受复杂的（mixed feelings）"], mnemonic: "证据有说有没 → 不一" },
+  "thrive": { pos: "v.", senses: [], mnemonic: "像植物一样往旺里长" },
+  "intentional": { pos: "adj.", senses: [], mnemonic: "心里有 intent（打算）→ 有意为之" },
+  "in the end": { pos: "phr.", senses: [], mnemonic: "走到尽头那一刻" },
+};
+/* 查词块附加信息的键：小写、压空格、撇号统一，避免 can't / can’t 查不到 */
+function metaKey(s){ return String(s == null ? '' : s).toLowerCase().replace(/[’‘`]/g, "'").replace(/\s+/g, ' ').trim(); }
+/* 词性推断：内置表里没有的词块（主要是「我的文章」里自动提上来的短语）也尽量给出词性。
+   只在高置信度时给：拿不准就留空，卡片上留「＋ 词性」让用户自己填，
+   宁可没有也不乱标——「其他义项」那行写错语义比留白更糟。 */
+const POS_PREP = new Set(['in','on','at','for','with','by','of','from','about','under','over','after','before','during','between','into','onto','upon','within','without','through','across','against','toward','towards','behind','beyond','despite','except','inside','outside','since','until','till','per','via','off','up','down','out','around','along','near','like','unlike','among','beside','besides','beneath','toward']);
+const POS_PARTICLE = new Set(['up','out','off','on','in','down','away','back','through','over','about','around','along','across','apart','aside','forward','together','by','onto','into']);
+const POS_AUX = new Set(['be','am','is','are','was','were','been','being','do','does','did','done','have','has','had','having','can','could','will','would','shall','should','may','might','must','ought']);
+const POS_DET = new Set(['a','an','the','this','that','these','those','my','your','his','her','its','our','their','some','any','no','all','every','each','another','other','such','what','which','whose','one','two','three','first','last','same','enough','more','most','few','little','many','much']);
+const SUFFIX_N = ['tion','sion','ment','ness','ity','ty','ance','ence','ship','hood','ism','ure','age','ery','dom','ance','ology','ence'];
+const SUFFIX_ADJ = ['ous','ful','less','able','ible','ive','al','ic','ish','ent','ant','ary','ory','y','like'];
+const SUFFIX_V = ['ize','ise','ify','en','ate'];
+/* -ly 结尾却不作副词的常见词，别被后缀规则带偏 */
+const LY_ADJ = new Set(['friendly','lovely','lonely','early','daily','weekly','monthly','yearly','likely','unlikely','silly','ugly','holy','jolly','deadly','lively','orderly','costly','elderly','only']);
+
+/* ===== 本地就能给的东西：词性、多义、构词助记 =====
+   「我的文章」的词块是自动提上来的，内置 67 条 CHUNK_META 覆盖不到，
+   所以这里放三张小表兜底。原则和之前一样：拿不准就不写，宁可留白也不乱标。 */
+
+/* 常见词的词性。比看后缀靠谱（light 是 n./adj./v.，suffix 规则只会猜到一个） */
+const WORD_POS_BY = {
+  'n.': 'time day week year month hour minute moment morning afternoon evening night word thing people person man woman child friend family home house room door window wall floor table chair bed garden office school class teacher student doctor nurse job work money price cost business company market shop store city town country world place road street car bus train plane airport station hotel restaurant food water tea coffee milk bread rice meat fruit apple egg breakfast lunch dinner party holiday birthday wedding music song movie book story news paper phone computer game sport team ball match weather rain snow wind sun moon sky sea river mountain tree flower animal bird dog cat fish light sound voice picture color shape size number question answer problem idea plan chance reason result change help love life death hope fear dream gift letter message photo video name',
+  'v.': 'be have do say go come get make take give see know light think want need use find tell ask work seem feel try leave call keep let begin start end help show hear play run move live believe bring happen write read sit stand lose pay meet include continue learn change lead understand watch follow stop create speak spend grow open walk win offer remember consider appear buy wait serve die send build stay fall cut reach kill remain suggest raise pass sell decide return explain develop carry break receive agree support hit produce eat drink sleep drive fly swim sing dance smile cry laugh study teach discuss travel visit wear clean wash cook listen enjoy prefer hate like love want hope wish plan choose prepare arrive relax worry wonder imagine describe improve practice repeat remember forget',
+  'adj.': 'good bad big small large long short high low new old young right left true false sure able important easy hard difficult simple complex happy sad angry tired hungry thirsty busy free full empty quiet loud clean dirty safe dangerous early late strong weak rich poor cheap expensive beautiful ugly nice kind friendly polite rude careful careless clear dark bright light heavy fast slow quick warm cold hot cool dry wet fresh modern common special usual different same deep shallow wide narrow thick thin soft smart clever funny serious honest lazy brave calm proud lucky ready possible necessary useful helpful terrible wonderful excellent perfect',
+  'adv.': 'very really quite too also just already still always never often sometimes usually almost enough again soon early late well fast hard quickly slowly easily finally actually probably maybe perhaps certainly exactly nearly hardly together'
+};
+const WORD_POS = (function(){
+  const out = {};
+  Object.keys(WORD_POS_BY).forEach(p => {
+    WORD_POS_BY[p].split(/\s+/).filter(Boolean).forEach(w => {
+      if (!out[w]) out[w] = [p];
+      else if (out[w].indexOf(p) < 0) out[w].push(p);
+    });
+  });
+  return out;
+})();
+function wordPosOf(word){
+  const arr = WORD_POS[String(word == null ? '' : word).toLowerCase()];
+  return arr ? arr.join(' / ') : '';
+}
+
+/* 真正「一词多义」的常见词。只收第二个意思跟第一个明显不同的，
+   同一词性的近义改写不算（那会让「其他义项」变成噪音）。 */
+const WORD_SENSES = {
+  light: '光；轻的；点燃', run: '跑；经营；流动', point: '要点；指向；分数', mean: '意思是；吝啬的；平均值',
+  fair: '公平的；集市；相当好', book: '书；预订', right: '右边；正确的；权利', left: '左边；剩下的',
+  bank: '银行；河岸', match: '比赛；火柴；相配', spring: '春天；泉水；弹簧', fall: '落下；秋天',
+  change: '改变；零钱', order: '顺序；点菜；命令', fine: '好的；罚款；细的', last: '最后的；持续',
+  kind: '种类；友善的', board: '板子；董事会；登机', check: '检查；账单；支票', watch: '手表；观看',
+  work: '工作；起作用', study: '学习；书房', head: '头；领导；朝向', hand: '手；递交',
+  face: '脸；面对', back: '后面；背部；回来', top: '顶部；最上面的', bottom: '底部；最下面的',
+  own: '自己的；拥有', state: '状态；陈述；州', rest: '休息；其余', sound: '声音；听起来；健全的',
+  matter: '事情；要紧', mind: '头脑；介意', power: '力量；电力', charge: '收费；充电；指控',
+  figure: '数字；人物；明白', issue: '问题；发行', company: '公司；陪伴', present: '现在；礼物；出席的',
+  still: '仍然；静止的', even: '甚至；平的；偶数', close: '关闭；靠近的', live: '居住；现场的',
+  lead: '带领；铅', race: '比赛；种族', train: '训练；火车', plan: '计划；平面图',
+  case: '情况；箱子；案件', term: '学期；术语；条款', smart: '聪明的；时髦的', sharp: '锋利的；急剧的',
+  odd: '奇怪的；单数的', firm: '公司；坚定的', scale: '规模；天平；鳞片', sense: '感觉；意义',
+  touch: '触摸；触动', beat: '打；节拍；打败', stick: '棍子；粘', drop: '落下；一滴',
+  plant: '植物；工厂；种植', plain: '平原；朴素的；清楚的', rock: '岩石；摇滚', wave: '波浪；挥手',
+  space: '空间；太空', key: '钥匙；关键的', note: '笔记；音符；注意', type: '类型；打字',
+  interest: '兴趣；利息', capital: '首都；资本', court: '法庭；球场', date: '日期；约会', class: '班级；阶级',
+  party: '聚会；政党', season: '季节；调味', trip: '旅行；绊倒', count: '数数；重要',
+  cost: '花费；代价', drive: '开车；驱使', fail: '失败；没通过', fix: '修理；确定的',
+  ground: '地面；理由', grow: '生长；变得', hold: '拿着；举行', keep: '保持；饲养',
+  land: '土地；降落', lift: '举起；电梯', mark: '记号；分数', miss: '想念；错过',
+  pack: '打包；一群', pick: '挑选；采摘', post: '邮寄；职位', press: '按；媒体',
+  raise: '举起；提高；筹集', rate: '比率；评价', ring: '戒指；响铃', save: '拯救；节省',
+  set: '设置；一套', sign: '签名；迹象', store: '商店；储存',
+  strike: '罢工；打击', taste: '味道；品味', tie: '领带；系', track: '轨道；追踪',
+  treat: '对待；招待', trust: '信任；信托', turn: '转动；轮到',
+  weigh: '称重；权衡', well: '好；井', will: '将要；意愿', yard: '院子；码'
+};
+
+/* 构词法助记：拆前后缀 + 词干义，拼成「un-（不）+ happy（快乐）→ 不快乐」这种能记住的一句。
+   拆不出东西就不生成——编出来的助记比没有更糟。 */
+const PREFIX_META = {
+  un: '不', re: '再、重新', dis: '不、分开', pre: '在前', mis: '错误地', over: '在上方、越过、过度', under: '不足、在下面',
+  inter: '在…之间', sub: '在下面', trans: '穿过', anti: '反对', non: '非', semi: '半', multi: '多',
+  micro: '微', auto: '自己', de: '向下、去除', en: '使…', ex: '向外、前任', im: '不／向里', in: '不／向里',
+  out: '超过、向外', bi: '二', tri: '三', pro: '向前、支持', post: '之后', mid: '中间', extra: '额外',
+  super: '超', ultra: '极', fore: '预先', self: '自我', well: '好好地',
+  ab: '离开', ad: '朝向', circum: '环绕', counter: '反对、对着', hyper: '过度', hypo: '不足、在下',
+  il: '不', ir: '不', macro: '大', mal: '坏', meta: '超越、变化', mono: '单', neo: '新',
+  omni: '全部', para: '旁边、防护', per: '贯穿', poly: '多', quad: '四', quasi: '类似',
+  retro: '向后', tele: '远', uni: '单', vice: '副', cyber: '网络', thermo: '热', dia: '穿过'
+};
+const SUFFIX_META = {
+  tion: '名词：动作或结果', sion: '名词：动作或结果', ment: '名词：结果或状态', ness: '名词：性质',
+  ity: '名词：性质', ance: '名词：状态', ence: '名词：状态', ship: '名词：身份或关系', hood: '名词：状态',
+  ism: '名词：主义或行为', ure: '名词：结果', age: '名词：集合或行为', ery: '名词：集合或场所',
+  dom: '名词：领域或状态', ful: '形容词：充满…的', less: '形容词：没有…的', able: '形容词：能…的',
+  ible: '形容词：能…的', ive: '形容词：有…性质的', ous: '形容词：多…的', al: '形容词：…的',
+  ic: '形容词：…的', ish: '形容词：略…的', ent: '形容词：…的', ant: '形容词：…的', ary: '形容词：…的',
+  like: '形容词：像…的', ize: '动词：使…化', ise: '动词：使…化', ify: '动词：使…', ate: '动词：使…',
+  ly: '副词：…地', er: '名词：…的人或物', or: '名词：…的人', ist: '名词：…者',
+  ology: '名词：…学', logy: '名词：…学', graphy: '名词：…写法、…记录', phobia: '名词：恐…症',
+  cide: '动词：杀…', ward: '副词：向…方向', wards: '副词：向…方向', wise: '副词：在…方面',
+  some: '形容词：有…倾向的', proof: '形容词：防…的', free: '形容词：无…的', en: '动词：使…',
+  ious: '形容词：多…的', eous: '形容词：有…性质的'
+};
+/* 常见词根：拆不出前后缀时长单词也能给出一句结构提示（inspect → spect 看）。
+   只做提示用，认错词根也就是提示不准，不会写进任何数据。 */
+const ROOT_META = {
+  spect: '看', spic: '看', vis: '看', vid: '看', dict: '说', ject: '扔', tract: '拉',
+  scrib: '写', script: '写', cred: '相信', duct: '引导', duc: '引导', fer: '带来',
+  form: '形状', graph: '写、画', log: '说、学科', mit: '送', miss: '送', mov: '动',
+  mot: '动', pel: '推', pend: '挂', phon: '声音', press: '压', rupt: '破',
+  sens: '感觉', sent: '感觉', sequ: '跟随', serv: '保存、服务', sist: '站', solv: '松开',
+  sta: '站', stru: '建造', tain: '握持', tend: '伸展', vac: '空', ven: '来',
+  vert: '转', vers: '转', voc: '叫', volv: '卷、转', cept: '拿', cid: '切', cis: '切',
+  clud: '关', clus: '关', gress: '走', grad: '走、步', loc: '地方', mand: '命令',
+  nov: '新', plic: '折', prim: '第一', temp: '时间', terr: '土地', val: '价值', poss: '能'
+};
+/* 在词干里找词根：优先长的（mand 比 man 更准），词根不能占满整个词干 */
+function findRoot(stem){
+  if (!stem || stem.length < 3) return null;
+  const keys = Object.keys(ROOT_META).sort((a, b) => b.length - a.length);
+  for (const r of keys){
+    /* 三字母词根只在词干开头/结尾才算，否则 human 会被认成 man（手） */
+    if (r.length <= 3){
+      if (stem !== r && !stem.startsWith(r) && !stem.endsWith(r)) continue;
+    } else if (stem.indexOf(r) < 0) continue;
+    return { root: r, gloss: ROOT_META[r] };
+  }
+  return null;
+}
+/* ========== 离线词典（可选）：data/dict.json，由 tools/build-dict.js 从 ECDICT 生成 ==========
+   没有这个文件也能正常用，只是少一份中文释义来源；取不到就静默跳过。 */
+let OFFLINE_DICT = null;
+const DICT_POS_RE = /^\s*(?:n|v|vt|vi|a|adj|adv|prep|conj|pron|num|art|int|abbr|aux|phr)\.\s*/i;
+const DICT_SPLIT = /[；;，,、]/;
+function dictEntry(chunk){
+  if (!OFFLINE_DICT || !chunk) return '';
+  const k = String(chunk).toLowerCase().replace(/\s+/g, ' ').trim();
+  return (k && OFFLINE_DICT[k]) || '';
+}
+/* 一条释义的来源不一：内置表写「罩；风帽；面罩」，ECDICT 生成的是「n. 罩, 风帽 | v. 罩上」。
+   | 分块（词性），分号分义项；同块里的逗号项是同义词，不再拆开。 */
+function dictBlocks(chunk){
+  const e = dictEntry(chunk);
+  return e ? e.split(/[|\n]+/).map(s => s.trim()).filter(Boolean) : [];
+}
+function dictSplitItems(text){
+  return String(text).replace(DICT_POS_RE, '').split(DICT_SPLIT).map(s => s.trim()).filter(Boolean);
+}
+function dictParts(chunk){
+  const blocks = dictBlocks(chunk);
+  return blocks.length ? dictSplitItems(blocks[0]) : [];
+}
+function dictGloss(chunk){
+  const parts = dictParts(chunk);
+  return parts.length ? parts[0] : '';
+}
+function dictSenses(chunk){
+  const blocks = dictBlocks(chunk);
+  const out = [];
+  for (const b of blocks.slice(1)){
+    const pos = (b.match(DICT_POS_RE) || [''])[0].trim();
+    const first = dictSplitItems(b)[0];
+    if (first) out.push(pos ? pos + ' ' + first : first);
+  }
+  /* 只有一块时，靠分号显式列出的义项才算「其他义项」（例：罩；风帽；面罩） */
+  if (!out.length && blocks.length === 1) out.push(...dictParts(chunk).slice(1));
+  return out.slice(0, 3);
+}
+/* 不规则词形表（data/lemma.json）：went → go、children → child，规则推不出来的那批 */
+let LEMMA = null;
+function lemmaOf(word){
+  if (!LEMMA || !word) return '';
+  return LEMMA[String(word).toLowerCase()] || '';
+}
+/* 双击打开（file://）时浏览器禁止 fetch 本地文件，离线词典必然拿不到：
+   页面上留一条可关闭的说明（关过就记住），免得让人以为功能坏了。 */
+const FILE_TIP_KEY = 'ecChunksFileTipOff';
+function offlineDataBlocked(){
+  return typeof location !== 'undefined' && !!location && location.protocol === 'file:';
+}
+function showOfflineTip(){
+  const tip = document.getElementById('fileTip');
+  if (!tip) return;
+  let off = false;
+  try {
+    off = localStorage.getItem(FILE_TIP_KEY) === '1';
+  } catch (e) {
+    /* 隐私模式下 localStorage 可能直接抛，那就每次照常显示 */
+  }
+  if (off) return;
+  tip.hidden = false;
+  const btn = document.getElementById('btnFileTipClose');
+  if (!btn) return;
+  btn.onclick = () => {
+    tip.hidden = true;
+    try {
+      localStorage.setItem(FILE_TIP_KEY, '1');
+    } catch (e) {
+      /* 存不下就算了，至少这次点了会收起 */
+    }
+  };
+}
+async function loadOfflineData(){
+  /* file:// 下 fetch 本地 json 必定失败，先给提示、省掉两次必输的请求 */
+  if (offlineDataBlocked()){
+    showOfflineTip();
+    return;
+  }
+  const grab = name => fetch(name).then(res => (res.ok ? res.json() : null)).catch(() => null);
+  const [d, l] = await Promise.all([grab('data/dict.json'), grab('data/lemma.json')]);
+  let loaded = false;
+  if (d && d.words){ OFFLINE_DICT = d.words; loaded = true; }
+  if (l && l.words){ LEMMA = l.words; loaded = true; }
+  if (!loaded) return;
+  try {
+    renderAll();
+    renderPlan();
+    renderLearn();
+  } catch (e) {
+    /* 直接打开 html 时可能还没初始化完，取不到就按没有数据算 */
+  }
+}
+
+/* 词干查义：多义表 → 词库 → 内置词块表里的同名单词条目 */
+/* 内置三张表（多义 / 词块表 / 词块补充）：构词助记只信这三张，别把大词典搬进来
+   —— 词典一变大，re+mote（微尘）这种没人会想到的拆法也会凑出助记。 */
+function builtinGloss(word){
+  const w = String(word == null ? '' : word).toLowerCase();
+  if (!w) return '';
+  if (WORD_SENSES[w]) return WORD_SENSES[w].split('；')[0];
+  if (CHUNK_GLOSSARY[w]) return CHUNK_GLOSSARY[w];
+  const meta = CHUNK_META[w];
+  return meta && meta.senses && meta.senses.length ? meta.senses[0] : '';
+}
+function glossOfWord(word){
+  const w = String(word == null ? '' : word).toLowerCase();
+  const own = builtinGloss(w);
+  if (own) return own;
+  const direct = dictGloss(w);
+  if (direct) return direct;
+  /* went → go：不规则变形先查回原形，再查内置表与词典各一次 */
+  const base = lemmaOf(w);
+  if (!base || base === w) return '';
+  return builtinGloss(base) || dictGloss(base);
+}
+/* 屈折变化不算构词：reinforced 只是 reinforce 的过去式，把 -ed 当后缀讲等于教错。
+   先把它剥回原形（原形要真在内置表或词典里查得到才算数，否则说明这不是屈折），
+   助记按原形给，末尾标一句它是谁的变化形式。 */
+function inflectBase(w){
+  if (w.length < 7) return '';
+  const tries = [];
+  if (/ied$/.test(w)) tries.push(w.slice(0, -3) + 'y');
+  if (/ies$/.test(w)) tries.push(w.slice(0, -3) + 'y');
+  if (/ing$/.test(w)){ tries.push(w.slice(0, -3)); tries.push(w.slice(0, -3) + 'e'); }
+  if (/ed$/.test(w)){ tries.push(w.slice(0, -2)); tries.push(w.slice(0, -1)); }
+  if (/(?:[^s])es$/.test(w)) tries.push(w.slice(0, -2));
+  if (/(?:[^su])s$/.test(w)) tries.push(w.slice(0, -1));
+  for (const t of tries){
+    if (t.length >= 5 && (builtinGloss(t) || dictGloss(t))) return t;
+  }
+  return '';
+}
+/* 这些字母组合在别的词中间也常见：in 不是 intentional 的前缀、de 不是 decide 的前缀。
+   同时带后缀时，除非认得出词根（invisible 的 vis），否则宁可只讲后半截。 */
+const WEAK_PREFIX = new Set(['de', 'en', 'ex', 'in', 'im', 'il', 'ir', 'per', 'pro', 'ad', 'ab', 'di', 'an']);
+function buildMorphMnemonic(word, gloss){
+  const w = String(word == null ? '' : word).toLowerCase().replace(/[^a-z]/g, '');
+  if (w.length < 5) return '';
+  const infl = inflectBase(w);
+  if (infl){
+    const note = buildMorphMnemonic(infl, '');
+    return note ? note + '（' + w + ' 是 ' + infl + ' 的变化形式）' : '';
+  }
+  let pre = Object.keys(PREFIX_META).filter(p => w.startsWith(p) && w.length > p.length + 2).sort((a, b) => b.length - a.length)[0] || '';
+  const suf = Object.keys(SUFFIX_META).filter(s => w.endsWith(s) && w.length > s.length + 2).sort((a, b) => b.length - a.length)[0] || '';
+  if (!pre && !suf) return '';
+  const stem = w.slice(pre ? pre.length : 0, suf ? w.length - suf.length : w.length);
+  if (stem.length < 3) return '';
+  /* 只有前后缀的时代，conversation / inspector 这类纯词根词一条助记都出不来；认到词根也算有了抓手 */
+  const rootHit = findRoot(stem);
+  if (!pre && !suf && !rootHit) return '';
+  /* 弱前缀 + 后缀：这个前缀多半不是它的前缀，除非认到词根，否则只讲后半截（intentional 就别硬拆） */
+  if (pre && suf && WEAK_PREFIX.has(pre) && !rootHit) pre = '';
+  /* happi-ness / easi-ly 去后缀后 y 变 i；organiz-ed 少了结尾的 e —— 查义与显示都要还原 */
+  const stemAlts = [];
+  if (stem.endsWith('i')) stemAlts.push(stem.slice(0, -1) + 'y');
+  /* 只给「去 e」的动词补回 e（believ → believe）：随意补会补出 posse（一队）这种真词 */
+  if (/[vz]$/.test(stem)) stemAlts.push(stem + 'e');
+  let stemShow = stem;
+  let stemGloss = builtinGloss(stem) || '';
+  if (!stemGloss){
+    for (const alt of stemAlts){
+      const g = builtinGloss(alt) || (alt.length >= 5 ? dictGloss(alt) : '');
+      if (g){ stemGloss = g; stemShow = alt; break; }
+    }
+  }
+  /* 词典的词干：没后缀时至少 5 个字母才认（否则 remote 会被拆成 re + mote＝微尘）；
+     有后缀时 4 个字母也认，不然 hopeless / joyful 这些常用词干全查不到 */
+  if (!stemGloss && (suf || stem.length >= 5)) stemGloss = dictGloss(stem) || '';
+  /* 词干既没意思、也认不出词根，就别硬凑：anticipation 会被拆成 anti- + cipation、conversation 拆成 co- + 共同 */
+  if (!stemGloss && !rootHit) return '';
+  /* 只有当前缀、没有后缀时，词干太短多半是误拆（remote 拆成 re + mote） */
+  if (pre && !suf && !stemGloss && stem.length < 5) return '';
+  const bits = [];
+  if (pre) bits.push(pre + '-（' + PREFIX_META[pre] + '）');
+  if (rootHit) bits.push(rootHit.root + '（' + rootHit.gloss + '）');
+  if (stemGloss && (!rootHit || rootHit.root !== stemShow)) bits.push(stemShow + '（' + stemGloss + '）');
+  if (!bits.length) bits.push(stemShow);
+  if (suf) bits.push('-' + suf + '（' + SUFFIX_META[suf] + '）');
+  return bits.join(' + ') + (gloss ? ' → ' + gloss : '');
+}
+
+/* 短语里不该参与拼义的小词：它们的意思在短语里几乎从不生效（in the end 的 in / the） */
+const PHRASE_SKIP = new Set(['a', 'an', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'up', 'out', 'off', 'and', 'or', 'but', 'so', 'that', 'this', 'these', 'those', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'be', 'is', 'are', 'was', 'were', 'a', 'an']);
+/* 「the morning light」这种带冠词/介词的长短语，整串查不到意思时退回它的 2–3 词子串，
+   比如 "morning light" 在内置表里 → 卡片上就不会只剩一个空意思。
+   子串必须正好是「整串剔掉虚词后的骨架」，否则会张冠李戴：
+   like to get 曾经因为子串 like to 被判成「差点儿就要」，run for fifteen 因为 run for 被判成「竞选」，
+   to-do list 因为 to do 被判成「要做某事」。带冠词介词的写法仍然认（剔掉虚词后骨架相同）。 */
+function subChunkGloss(chunk){
+  const words = chunkStrictKey(chunk).split(' ').filter(Boolean);
+  if (words.length < 2) return '';
+  const coreWords = words.filter(w => !PHRASE_SKIP.has(w));
+  if (!coreWords.length) return '';
+  for (let n = Math.min(3, words.length - 1); n >= 2; n--){
+    for (let i = 0; i + n <= words.length; i++){
+      const sub = words.slice(i, i + n);
+      const subCore = sub.filter(w => !PHRASE_SKIP.has(w));
+      /* 子串只留一个实词的不算：like to → 只有 like、run for → 只有 run、to do → 只有 do，
+         它们跟整串意思不是一回事（曾经被当成「差点儿就要」「竞选」「要做某事」） */
+      if (subCore.length < 2) continue;
+      /* 只许丢开头的实词（say good morning → good morning 还行），末尾实词不许丢：
+         like to get 丢了 get、run for fifteen 丢了 fifteen、to-do list 丢了 list，全都张冠李戴 */
+      if (subCore.join(' ') !== coreWords.slice(coreWords.length - subCore.length).join(' ')) continue;
+      const key = sub.join(' ');
+      const g = lookupGloss(key);
+      if (g) return g;
+      const meta = CHUNK_META[key];
+      if (meta && meta.senses && meta.senses[0]) return meta.senses[0];
+    }
+  }
+  return '';
+}
+
+/* 数字 + 单位这类短语，中文是机械可算的：twenty minutes → 二十分钟、three days → 三天。
+   以前只能等用户点「译」或者自己填，现在直接在提取时就带上意思和 num.+n. 词性。 */
+const NUM_WORD = {
+  one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10,
+  eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19,
+  twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90,
+  hundred:100
+};
+const NUM_UNIT_ZH = {
+  second:'秒', seconds:'秒', minute:'分钟', minutes:'分钟', hour:'小时', hours:'小时',
+  day:'天', days:'天', week:'周', weeks:'周', month:'个月', months:'个月', year:'年', years:'年',
+  time:'次', times:'次', page:'页', pages:'页', word:'个词', words:'个词', step:'步', steps:'步',
+  cup:'杯', cups:'杯', bowl:'碗', bowls:'碗', mile:'英里', miles:'英里', kilometer:'公里', kilometers:'公里',
+  meter:'米', meters:'米', dollar:'美元', dollars:'美元', yuan:'元', percent:'%（百分之）'
+};
+const ZH_DIGIT = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+function zhNumber(n){
+  if (!(n > 0)) return '';
+  if (n < 10) return ZH_DIGIT[n];
+  if (n === 10) return '十';
+  if (n < 20) return '十' + ZH_DIGIT[n - 10];
+  if (n < 100){
+    const t = Math.floor(n / 10), r = n % 10;
+    return ZH_DIGIT[t] + '十' + (r ? ZH_DIGIT[r] : '');
+  }
+  if (n < 1000){
+    const h = Math.floor(n / 100), r = n % 100;
+    return ZH_DIGIT[h] + '百' + (r ? (r < 10 ? '零' : '') + zhNumber(r) : '');
+  }
+  return '';
+}
+/* twenty minutes / three days：首部全是数字词、末词是量词才算，别的一律返回空 */
+function numPhraseGloss(chunk){
+  const words = chunkStrictKey(chunk).split(' ').filter(Boolean);
+  /* seven o'clock：数字 + 点钟，也是机械可算的 */
+  if (words.length === 2 && words[1] === "o'clock"){
+    const h = NUM_WORD[words[0]];
+    return h && h >= 1 && h <= 12 ? zhNumber(h) + '点' : '';
+  }
+  if (words.length < 2 || words.length > 3) return '';
+  const unit = NUM_UNIT_ZH[words[words.length - 1]];
+  if (!unit) return '';
+  let total = 0, seen = 0;
+  for (const w of words.slice(0, -1)){
+    const v = NUM_WORD[w];
+    if (!v) return '';
+    total += v; seen++;
+  }
+  if (!seen || total < 1 || total > 999) return '';
+  return zhNumber(total) + unit;
+}
+
+/* 词块筛选：2–3 词滑窗会提出「dressed and pack」「takes me twenty」这种碎片，
+   卡片上堆一堆没记忆价值的条目反而让人不想看。
+   有中文意思的算真语块；没意思的按词组形状判断，明显是碎片的直接丢。
+   strict 筛完不足 5 条时再用 loose 规则补，短文章不至于一条都没有。 */
+const CHUNK_LINKERS = new Set(['and', 'or', 'but', 'nor', 'so', 'yet']);
+const CHUNK_WEAK_MID = new Set(['this', 'that', 'these', 'those', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'me', 'you', 'him', 'us', 'them', 'some', 'any', 'much', 'many', 'more', 'most', 'such', 'very', 'just', 'also']);
+/* 缩写形式（it's / I'll / didn't）自己不成语块，出现在片里就是被切断的半句 */
+const CHUNK_CONTRACT = /^(?:i'm|i'll|i've|i'd|you're|you'll|you've|you'd|he's|he'll|she's|she'll|it's|it'll|we're|we'll|we've|we'd|they're|they'll|they've|that's|there's|what's|let's|who's|here's|isn't|aren't|wasn't|weren't|don't|doesn't|didn't|can't|couldn't|won't|wouldn't|shouldn't|haven't|hasn't|hadn't|mustn't)$/;
+/* 常见动词原型：用来判断「主语 + 谓语」被切成两词的情况（Sarah walks、fingers hurt） */
+const VERB_BASE = new Set(('be am is are was were been being have has had do does did say get make go know take see come think look want give use find tell ask work seem feel try leave call need become mean keep let begin help talk turn start show hear play run move live believe hold bring happen write provide sit stand lose pay meet include continue set learn change lead understand watch follow stop create speak read allow add spend grow open walk win offer remember love consider appear buy wait serve die send expect build stay fall cut reach kill remain suggest raise pass sell require report decide pull explain hope develop carry break receive agree support hit produce eat cover catch draw choose cause point listen realize plan notice drive wear put drink sing sleep wake wash dress enjoy check brush pack arrive return answer visit teach study finish prepare cook clean relax travel forget regret worry hurt improve practice join invite smell taste order smile laugh cry shout argue complain refuse accept promise warn describe mention discuss compare avoid prevent reduce increase achieve manage deserve prefer hate like wish sound complete end close enter climb drop throw push cross guide fill count measure test').split(' '));
+const IRREGULAR_VERB = new Set(('felt made kept ran said told took gave went came saw knew thought brought found got had did was were been began broke chose drove ate drank wrote spoke stood held lost paid met sent spent built left led won wore slept woke became grew fell read heard').split(' '));
+function isNumberishWord(w){ return !!(NUM_WORD[w] || NUM_UNIT_ZH[w]); }
+function isVerbForm(w){
+  if (!w) return false;
+  if (VERB_BASE.has(w) || IRREGULAR_VERB.has(w)) return true;
+  const cand = [];
+  if (/[^s]s$/.test(w)) cand.push(w.slice(0, -1));
+  if (/(ss|sh|ch|x|z)es$/.test(w)) cand.push(w.slice(0, -2));
+  if (/ies$/.test(w)) cand.push(w.slice(0, -3) + 'y');
+  if (/ed$/.test(w)){ cand.push(w.slice(0, -2)); cand.push(w.slice(0, -1)); }
+  if (/ing$/.test(w)){ cand.push(w.slice(0, -3)); cand.push(w.slice(0, -3) + 'e'); cand.push(w.slice(0, -4)); }
+  return cand.some(c => c.length >= 2 && (VERB_BASE.has(c) || IRREGULAR_VERB.has(c)));
+}
+/* 只能是动词变形的词形（-s/-ed/-ing / 不规则过去式）：这类词做末词时，片多半是「主语 + 谓语」；
+   原型动词做末词则常见于名词短语（remote work / software engineer），不能一刀切 */
+function isVerbInflection(w){
+  if (!w) return false;
+  if (IRREGULAR_VERB.has(w)) return true;
+  if (/(ss|sh|ch|x|z)es$/.test(w) || /[^s]s$/.test(w)) return true;
+  if (/ed$/.test(w)) return true;
+  if (/ing$/.test(w) && w.length > 4) return true;
+  return false;
+}
+function chunkMeaningOf(chunk){ return lookupGloss(chunk) || subChunkGloss(chunk) || numPhraseGloss(chunk); }
+/* meaning 非空 = 查得到中文，一定是值得记的语块。
+   loose=true 时只保留「明显是碎片」的判断（并列连词、缺单位词的数字），用于补足条数。 */
+function chunkWorth(chunk, meaning, count, loose){
+  const words = chunkStrictKey(chunk).split(' ').filter(Boolean);
+  if (!words.length) return false;
+  if (meaning) return true;
+  if (words.some(w => CHUNK_LINKERS.has(w))) return false;
+  if (words.some(w => isNumberishWord(w))) return false;
+  if (words.length >= 3){
+    if (loose) return true;
+    return count >= 2;
+  }
+  /* 末词是动词变形、首词不是动词 → 这是「主语 + 谓语」被切成两词（Sarah walks / routine helps） */
+  if (isVerbInflection(words[words.length - 1]) && !isVerbForm(words[0])) return false;
+  if (CHUNK_CONTRACT.test(words[0]) || CHUNK_CONTRACT.test(words[words.length - 1])) return false;
+  const [a, b] = words;
+  if (loose) return !(POS_DET.has(a) && POS_DET.has(b));
+  if (CHUNK_WEAK_MID.has(a) || CHUNK_WEAK_MID.has(b)) return false;
+  if (POS_PREP.has(a) || POS_AUX.has(a) || POS_DET.has(a) || POS_PARTICLE.has(a)) return false;
+  if (POS_PREP.has(b) || POS_AUX.has(b) || POS_DET.has(b)) return false;
+  return true;
+}
+
+/* 短语助记：先看整条有没有现成释义（give up 就是放弃），
+   整条没有才退回拆词，而且拆词只摆实词、每个词的意思要短到能信。
+   以前的教训：拆词拆出来的义常是短语里根本不用的那个义——care about 摆成「小心 + 在...周围」、
+   give up 摆成「弹性 + 向上的」，比空着更容易记错。 */
+/* 一条释义里能当「词义线索」的部分：剥掉词性前缀，只取第一项 */
+function phraseGlossHead(text){
+  const bare = String(text == null ? '' : text).replace(DICT_POS_RE, '');
+  const first = bare.split(DICT_SPLIT)[0].trim();
+  /* 词典条目常带「试图/努力(做)...」这种尾巴，摆在助记里难看，去掉结尾的省略号和句点 */
+  return first.replace(/[…\.．。]+$/, '').trim();
+}
+/* 三单 -s / -es 通常不在词形表里（feels 查不到 feel），可短语里要按原形取义才对：
+   feels 直查会落到 felt（毛毯），原形 feel 才是「感觉」 */
+function phraseBaseOf(w){
+  const cands = [];
+  if (/(ss|sh|ch|x|z|o)es$/.test(w)) cands.push(w.slice(0, -2));
+  if (/ies$/.test(w)) cands.push(w.slice(0, -3) + 'y');
+  if (/[^s]s$/.test(w)) cands.push(w.slice(0, -1));
+  /* 规则优先于词形表：data/lemma.json 里 feels 被收成 felt（毛毯），规则给的 feel 才是「感觉」 */
+  for (const c of cands){
+    if (c.length >= 4 && (builtinGloss(c) || dictGloss(c))) return c;
+  }
+  const l = lemmaOf(w);
+  return l && l !== w && l.length >= 3 ? l : '';
+}
+function buildPhraseMnemonic(chunk){
+  const key = chunkStrictKey(chunk);
+  const words = key.split(' ').filter(Boolean);
+  if (words.length < 2 || words.length > 3) return '';
+  /* 整条先查：词典里的短语条目（coffee shop = 咖啡店）、数字量词（twenty minutes = 二十分钟）
+     都比拆词准得多，拆词只作为「整条查不到」时的退路 */
+  const whole = phraseGlossHead(chunkMeaningOf(key));
+  const bits = [];
+  let solid = 0;
+  for (const w of words){
+    /* 虚词先跳过再查词：词典一上线，in / the / up / off 全都有释义，
+       以前靠「查不到」挡住的噪音会全冒出来（in the end → in（在...期间）+ the（那）+ end（结束）） */
+    if (PHRASE_SKIP.has(w)) continue;
+    /* 屈折形按原形取义：felt 在词典里是「毛毯」，feel 才是「感觉」——短语里出现的一定是后者 */
+    const base = phraseBaseOf(w);
+    const g = (base && base !== w ? phraseGlossHead(builtinGloss(base)) || phraseGlossHead(dictGloss(base)) : '') || phraseGlossHead(glossOfWord(w));
+    /* 释义太长的多半是短语里用不到的生僻义（minutes → 会议记录），宁可只摆词 */
+    if (g && g.length <= 3){ bits.push(w + '（' + g + '）'); solid++; }
+    else bits.push(w);
+  }
+  const split = solid >= 2 ? bits.join(' + ') : '';
+  /* 整条有现成释义就直接用它：拆词只是退路，两套一起摆反而啰嗦（twenty minutes 只要「二十分钟」） */
+  if (whole) return whole.length <= 60 ? whole : whole.slice(0, 60);
+  if (!split) return '';
+  return split.length <= 60 ? split : '';
+}
+
+/* 没有 AI 回答、内置表也查不到时，本地能给的三样东西 */
+function autoChunkNote(chunk){
+  const words = chunkStrictKey(chunk).split(' ').filter(Boolean);
+  const single = words.length === 1 ? words[0] : '';
+  const pos = single ? (wordPosOf(single) || inferPos(chunk)) : inferPos(chunk);
+  const own = single && WORD_SENSES[single] ? WORD_SENSES[single].split('；').slice(1).filter(Boolean) : [];
+  /* 内置多义表没有的词，用离线词典的其余义项兜底 */
+  const senses = own.length ? own : (single ? dictSenses(single) : []);
+  const mnemonic = single ? buildMorphMnemonic(single, '') : buildPhraseMnemonic(chunk);
+  return { pos, inferred: !!pos, senses: senses.slice(0, 3), mnemonic };
+}
+
+/* 一个词块大概是什么词性。判不出来返回空串（不猜）。 */
+function inferPos(chunk){
+  const words = metaKey(chunk).replace(/[^a-z'\-\s]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.length) return '';
+  if (words.length === 1){
+    const w = words[0];
+    if (NUM_WORD[w]) return 'num.';
+    if (w.length < 3) return '';
+    /* 表里有的常见词直接查表：light 是 n./v./adj.，后缀规则只猜得到一个 */
+    const known = wordPosOf(w);
+    if (known) return known;
+    if (w.endsWith('ly')) return LY_ADJ.has(w) ? 'adj.' : 'adv.';
+    if (/[^aeiou]ing$/.test(w)) return 'v.ing';
+    if (/[^e]ed$/.test(w) || /i?ed$/.test(w)) return 'v.ed';
+    if (SUFFIX_V.some(s => w.endsWith(s) && w.length > s.length + 2)) return 'v.';
+    if (SUFFIX_N.some(s => w.endsWith(s) && w.length > s.length + 2)) return 'n.';
+    if (SUFFIX_ADJ.some(s => w.endsWith(s) && w.length > s.length + 2)) return 'adj.';
+    if (/(ss|sh|ch|x|z)es$/.test(w) || /[^s]s$/.test(w)) return 'n.';
+    return '';
+  }
+  const first = words[0], last = words[words.length - 1];
+  /* twenty minutes 是 num.+n.，不是 n. phr.（POS_DET 里有 one/two/…，会先命中） */
+  if (NUM_WORD[first] && NUM_UNIT_ZH[last]) return 'num.+n.';
+  if (first === 'to' && words.length > 1) return 'to do';
+  if (POS_PREP.has(first) && !POS_AUX.has(first)) return 'prep. phr.';
+  if (POS_AUX.has(first)) return 'v. phr.';
+  if (POS_DET.has(first)) return 'n. phr.';
+  if (POS_PARTICLE.has(last) || POS_PREP.has(last)) return 'v. phr.';
+  if (SUFFIX_ADJ.some(s => first.endsWith(s) && first.length > s.length + 2)) return 'adj.+n.';
+  if (SUFFIX_N.some(s => last.endsWith(s) && last.length > s.length + 2)) return 'v.+n.';
+  if (/[^aeiou]ing$/.test(last)) return 'v.';
+  return 'phr.';
+}
+
+/* 词块卡片要显示的三样东西：文章自带的 chunkNotes 优先（AI 给的更贴合这篇），其次是内置表，
+   两样都没有就按词形推断一个词性；多义和助记没法凭空生成，卡片上留「＋」让用户自己补 */
+function chunkMeta(chunk, lesson){
+  const key = metaKey(chunk);
+  const notes = lesson && lesson.chunkNotes ? lesson.chunkNotes[key] : null;
+  const base = notes || CHUNK_META[key] || null;
+  /* 本地兜底：词性查表/按词形推断，多义查 WORD_SENSES，助记按构词法拆（拆不出就空着） */
+  const auto = autoChunkNote(chunk);
+  if (!base){
+    return { pos: auto.pos, inferred: !!auto.pos, senses: auto.senses, mnemonic: auto.mnemonic };
+  }
+  const pos = base.pos || auto.pos;
+  const baseSenses = Array.isArray(base.senses) ? base.senses.filter(Boolean) : [];
+  return {
+    pos,
+    inferred: !base.pos && !!pos,
+    senses: (baseSenses.length ? baseSenses : auto.senses).slice(0, 3),
+    mnemonic: base.mnemonic || auto.mnemonic
+  };
+}
+
+/* 「忍不住／控制不了」这种写法本身就是两个意思：拆成主意思 + 其他义项，卡片上分两行更好读 */
+function splitChunkMeaning(meaning){
+  const parts = String(meaning == null ? '' : meaning).split(/\s*[／/]\s*/).filter(Boolean);
+  return { main: parts[0] || '', rest: parts.slice(1) };
+}
+
+/* 卡片上的「其他义项」：主意思已经写过的别再列一遍（意思就是「轻的」，其他义项又来一条 adj. 轻的）。
+   词典释义带词性前缀（adj. 轻的），比的时候先剥掉；差的只是词性和标点也算同一条。 */
+function metaSenses(meta, meaning){
+  const main = String(splitChunkMeaning(meaning).main || '').replace(/[。.．\s]/g, '').toLowerCase();
+  const out = [];
+  ((meta && meta.senses) || []).forEach(s => {
+    const raw = String(s || '').trim();
+    if (!raw) return;
+    const bare = raw.replace(DICT_POS_RE, '').replace(/[。.．\s]/g, '').toLowerCase();
+    if (!bare) return;
+    if (bare === main) return;
+    /* 主意思写成「忍不住」、义项是「忍不住做某事」这种包含关系也算重复 */
+    if (main.length > 1 && (main.includes(bare) || bare.includes(main))) return;
+    if (out.some(x => x.replace(DICT_POS_RE, '').replace(/[。.．\s]/g, '').toLowerCase() === bare)) return;
+    out.push(raw);
+  });
+  return out.slice(0, 3);
+}
 
 /* ========== 工具 ========== */
 const $  = (s, r = document) => r.querySelector(s);
@@ -356,8 +1031,27 @@ function splitByRegex(text, re){
   if (remaining) out.push(remaining);
   return out;
 }
+/* 句点不全都是句末：缩写（a.m. / U.S. / Mr.）和小数（3.50）里的点要是也拿来切，
+   「We left at 9 a.m. It was cold.」会变成 3 段。做法是把这些点先换成占位符，切完再换回来。
+   只换「不是最后一个」的点（a.m. → a\u0001m.），让真正的句末点仍然落在缩写末尾，切点才对得上。 */
+const SENT_HOLD = '\u0001';
+const SENT_DOT_ABBR = /([A-Za-z])\.(?=[A-Za-z]\.)/g; // a.m. / U.S. / e.g. / i.e.
+/* 单个字母 + 句点 + 小写词，说明句子还没完（e.g. a cat 的 g.）：真句末后面跟的是大写 */
+const SENT_DOT_SOLO = /([A-Za-z])\.(?=\s+[a-z])/g;
+const SENT_DOT_WORD = /\b(Mr|Mrs|Ms|Dr|Prof|St|Jr|Sr|vs|etc|Inc|Ltd|Co|Corp|No|Vol|Fig|Ave|Blvd)\./g;
+const SENT_DOT_DEC = /(\d)\.(?=\d)/g; // 3.50
+function holdSentenceDots(text){
+  return String(text == null ? '' : text)
+    .replace(SENT_DOT_ABBR, '$1' + SENT_HOLD)
+    .replace(SENT_DOT_SOLO, '$1' + SENT_HOLD)
+    .replace(SENT_DOT_WORD, '$1' + SENT_HOLD)
+    .replace(SENT_DOT_DEC, '$1' + SENT_HOLD);
+}
 function splitEnglishSentences(text){
-  return splitByRegex(text, /[^.!?]+[.!?]+["'”’]?/g);
+  /* 不许给结果加 filter(Boolean)：空输入历来返回 []，加了会让调用方多拿到一段空串 */
+  return splitByRegex(holdSentenceDots(text), /[^.!?]+[.!?]+["'”’]?/g).map(s =>
+    s.split(SENT_HOLD).join('.')
+  );
 }
 
 function splitChineseSentences(text){
@@ -489,7 +1183,9 @@ let storageOK = true;
 
 function defaultState(){ return { version: DATA_VERSION, chunks:[], logs:{}, streak:0, lastActive:null, settings:{ currentWeek:1 }, customLessons:[], trash:[], progress:{}, lessonEdits:{}, deletedLessons:{}, mistakes:{}, deletedMistakes:{}, trCache:{} }; }
 function normalizeChunk(c){
-  return { id:c.id||uid(), sentence:c.sentence||'', chunk:c.chunk||'', meaning:c.meaning||'', mine:c.mine||'', source:c.source||'', added:c.added||todayStr(), nextReview:c.nextReview||todayStr(), stage:Number.isFinite(c.stage)?c.stage:0, mastered:!!c.mastered, lastReviewed:c.lastReviewed||null };
+  /* pos / mem 是可选的展示字段（词性、助记）：老数据没有就是空串，
+     收集时从文章词块带过来（见 renderLessonDetail 的 data-collect）。 */
+  return { id:c.id||uid(), sentence:c.sentence||'', chunk:c.chunk||'', meaning:c.meaning||'', mine:c.mine||'', source:c.source||'', pos:c.pos||'', mem:c.mem||'', added:c.added||todayStr(), nextReview:c.nextReview||todayStr(), stage:Number.isFinite(c.stage)?c.stage:0, mastered:!!c.mastered, lastReviewed:c.lastReviewed||null };
 }
 function normalizeLesson(l){
   const text = Array.isArray(l.text) ? l.text.filter(Boolean) : (typeof l.text === 'string' ? l.text.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean) : []);
@@ -503,8 +1199,22 @@ function normalizeLesson(l){
     text: aligned.en, textZh: aligned.zh,
     chunks: Array.isArray(l.chunks) ? l.chunks.filter(Boolean) : [],
     quiz: Array.isArray(l.quiz) ? l.quiz.filter(Boolean) : [],
-    cloze: Array.isArray(l.cloze) ? l.cloze.filter(Boolean) : []
+    cloze: Array.isArray(l.cloze) ? l.cloze.filter(Boolean) : [],
+    chunkNotes: normalizeChunkNotes(l.chunkNotes)
   };
+}
+/* 词块附加信息（词性 / 多义 / 助记）跟着文章存，键是小写词块：
+   读盘时按白名单裁剪，避免旧数据或云端合并带进奇怪的字段 */
+function normalizeChunkNotes(obj){
+  const out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  Object.keys(obj).slice(0, 200).forEach(k => {
+    const v = obj[k];
+    if (!v || typeof v !== 'object') return;
+    const senses = Array.isArray(v.senses) ? v.senses.filter(s => typeof s === 'string' && s.trim()).slice(0, 4).map(s => s.trim().slice(0, 60)) : [];
+    out[k] = { pos: String(v.pos || '').slice(0, 20), senses, mnemonic: String(v.mnemonic || '').slice(0, 80) };
+  });
+  return out;
 }
 /* 译文缓存是「英文原文 → 中文」，只用来省一次联网，丢了解释不丢数据，所以可以限制长度。
    超了就按插入顺序淘汰最老的（对象属性顺序即插入顺序，字符串键安全）。 */
@@ -614,9 +1324,9 @@ function maybeNagBackup(){
 
 /* ========== 业务 ========== */
 const INTERVALS = [2, 4, 7, 14, 30];
-function addChunk({sentence, chunk, meaning, mine, source}){
+function addChunk({sentence, chunk, meaning, mine, source, pos, mem}){
   const t = todayStr();
-  state.chunks.unshift({ id:uid(), sentence:sentence.trim(), chunk:chunk.trim(), meaning:meaning.trim(), mine:(mine||'').trim(), source:(source||'').trim(), added:t, nextReview:addDays(t, INTERVALS[0]), stage:0, mastered:false, lastReviewed:null });
+  state.chunks.unshift({ id:uid(), sentence:sentence.trim(), chunk:chunk.trim(), meaning:meaning.trim(), mine:(mine||'').trim(), source:(source||'').trim(), pos:(pos||'').trim(), mem:(mem||'').trim(), added:t, nextReview:addDays(t, INTERVALS[0]), stage:0, mastered:false, lastReviewed:null });
   touchActivity(); saveState();
 }
 function updateChunk(id, data){
@@ -717,7 +1427,8 @@ function lookupGloss(chunk){
   if (CHUNK_GLOSSARY[stripped]) return CHUNK_GLOSSARY[stripped];
   const words = k2.split(' ');
   if (words.length === 1 && CHUNK_GLOSSARY[words[0]]) return CHUNK_GLOSSARY[words[0]];
-  return '';
+  /* 内置表都没有时问离线词典（data/dict.json，没有这个文件就返回空） */
+  return dictGloss(k2);
 }
 
 /* ========== 提取词块（带句子索引） ========== */
@@ -742,31 +1453,57 @@ function extractChunks(textArr, limit = 18){
         if (phraseLower.replace(/\s/g, '').length < 5) continue;
         const start = slice[0].index;
         const end = slice[slice.length - 1].index + slice[slice.length - 1].word.length;
-        const display = sent.slice(start, end);
+        /* 跨标点的候选不要：以前会提出 "end, the quiet" 这种带逗号的碎片，
+           既不像语块也没法在原文里高亮，词块卡片上只会显得脏 */
+        if (/[,.;:!?"()\[\]…—–]/.test(sent.slice(start, end))) continue;
+        const display = slice.map(w => w.word).join(' ');
         if (!candidates.has(phraseLower)){
-          candidates.set(phraseLower, { count: 0, sentence: sent, display, sentIdx });
+          candidates.set(phraseLower, { count: 0, sentence: sent, display, sentIdx, meaning: chunkMeaningOf(display) });
         }
         candidates.get(phraseLower).count++;
       }
     }
   });
+  /* 有中文意思的排前面：这些是内置表里认得的真语块，卡片上能直接看到释义 */
   const list = Array.from(candidates.values()).sort((a, b) => {
+    if (!!b.meaning !== !!a.meaning) return b.meaning ? 1 : -1;
     if (b.count !== a.count) return b.count - a.count;
     return b.display.length - a.display.length;
   });
   const picked = [];
+  const rejected = [];
   const seen = new Set();
+  /* 双向去重：既排除「已选包含新候选」，也排除「新候选包含已选」 */
+  const conflicts = (arr, key) => arr.some(p => {
+    const pk = p.chunk.toLowerCase();
+    return pk === key || pk.includes(key) || key.includes(pk);
+  });
+  const toItem = (c) => ({ chunk: c.display, sentence: c.sentence, meaning: c.meaning, sentIdx: c.sentIdx });
+  /* 没释义的候选最多占一半名额：有释义的（内置表认得的真语块）才是卡片主体，
+     剩下的位置宁可空着，也不塞「habits stubborn」这种切碎的半句 */
+  const noMeaningCap = Math.max(3, Math.ceil(limit / 2));
+  let noMeaning = 0;
   for (const c of list){
+    if (picked.length >= limit) break;
     const key = c.display.toLowerCase();
     if (seen.has(key)) continue;
-    /* 双向去重：既排除「已选包含新候选」，也排除「新候选包含已选」（原实现只有单向，会重复收录） */
-    if (picked.some(p => {
-      const pk = p.chunk.toLowerCase();
-      return pk === key || pk.includes(key) || key.includes(pk);
-    })) continue;
-    picked.push({ chunk: c.display, sentence: c.sentence, meaning: lookupGloss(c.display), sentIdx: c.sentIdx });
+    if (conflicts(picked, key)) continue;
     seen.add(key);
-    if (picked.length >= limit) break;
+    if (!c.meaning && noMeaning >= noMeaningCap){ rejected.push(toItem(c)); continue; }
+    if (chunkWorth(c.display, c.meaning, c.count, false)) {
+      picked.push(toItem(c));
+      if (!c.meaning) noMeaning++;
+    } else rejected.push(toItem(c));
+  }
+  /* 内置表没料或文章太短时，严格筛完可能没几条，按 loose 规则补回，最多到 5 条 */
+  if (picked.length < 5){
+    for (const item of rejected){
+      if (picked.length >= Math.min(5, limit)) break;
+      if (conflicts(picked, item.chunk.toLowerCase())) continue;
+      const c = list.find(x => x.display === item.chunk);
+      if (!c || !chunkWorth(c.display, c.meaning, c.count, true)) continue;
+      picked.push(item);
+    }
   }
   return picked;
 }
@@ -1127,6 +1864,7 @@ function mistakeSentence(m){
 const AI_SITES = [
   { key: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com/' },
   { key: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/' },
+  { key: 'qianwen', name: '千问', url: 'https://www.qianwen.com/' },
   { key: 'kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn/' },
   { key: 'doubao', name: '豆包', url: 'https://www.doubao.com/chat/' },
   { key: 'yuanbao', name: '腾讯元宝', url: 'https://yuanbao.tencent.com/chat/' }
@@ -1353,6 +2091,20 @@ function applyLessonEdits(lesson){
   if (!e || typeof e !== 'object') return lesson;
   if (Array.isArray(lesson.textZh) && e.textZh && typeof e.textZh === 'object'){
     Object.keys(e.textZh).forEach(i => { const v = e.textZh[i]; if (v) lesson.textZh[Number(i)] = v; });
+  }
+  if (e.chunkNotes && typeof e.chunkNotes === 'object'){
+    const merged = Object.assign({}, lesson.chunkNotes || {});
+    Object.keys(e.chunkNotes).forEach(k => {
+      const src = e.chunkNotes[k];
+      if (!src || typeof src !== 'object') return;
+      const prev = merged[k] || { pos: '', senses: [], mnemonic: '' };
+      merged[k] = {
+        pos: src.pos || prev.pos || '',
+        senses: Array.isArray(src.senses) && src.senses.length ? src.senses.slice(0, 4) : (prev.senses || []),
+        mnemonic: src.mnemonic || prev.mnemonic || ''
+      };
+    });
+    lesson.chunkNotes = merged;
   }
   if (Array.isArray(lesson.chunks)){
     lesson.chunks.forEach(c => {
@@ -1924,8 +2676,13 @@ function renderChunkRows(lesson){
   const chunkRows = lesson.chunks.length ? lesson.chunks.map((c, i) => {
     const collected = isChunkCollected(c.chunk);
     const ex = exampleFor(c, lesson);
+    /* 词性 / 多义 / 助记：内置文章查 CHUNK_META，AI 写的文章查 lesson.chunkNotes，
+       两样都没有就只剩中文意思（不硬编造助记）。 */
+    const meta = chunkMeta(c.chunk, lesson);
+    const meaningParts = splitChunkMeaning(c.meaning);
+    const senses = (meaningParts.rest || []).concat(metaSenses(meta, c.meaning));
     const meaningHtml = c.meaning
-      ? esc(c.meaning)
+      ? esc(meaningParts.main || c.meaning)
       : `<input class="inline-input" data-meaning-idx="${i}" placeholder="补充中文意思（回车保存）" autocomplete="off">
          <div class="inline-tip">也可以点「译」自动翻译 <button class="btn tiny" data-trans-chunk="${i}" type="button">译</button></div>`;
     const exEn = ex.en ? `<div class="ci-sent">${highlightText(ex.en, [{ chunk: c.chunk }])}${speakBtn(ex.en)}</div>` : '';
@@ -1935,8 +2692,10 @@ function renderChunkRows(lesson){
           : `<div class="ci-sent-zh"><button class="btn tiny" data-trans-sent="${i}" type="button">翻译例句</button></div>`);
     return `<div class="chunk-item">
       <div class="ci-main">
-        <div class="ci-c">${esc(c.chunk)}${speakBtn(c.chunk)}</div>
+        <div class="ci-c">${esc(c.chunk)}${meta.pos ? `<span class="ci-pos${meta.inferred ? ' guess' : ''}"${meta.inferred ? ' title="按词形自动推断"' : ''}>${esc(meta.pos)}</span>` : ''}${speakBtn(c.chunk)}</div>
         <div class="ci-m">${meaningHtml}</div>
+        ${senses.length ? `<div class="ci-senses"><span class="ci-lbl">其他义项</span>${senses.map(esc).join('；')}</div>` : ''}
+        ${meta.mnemonic ? `<div class="ci-mem">助记：${esc(meta.mnemonic)}</div>` : ''}
         ${exEn}${exZh}
       </div>
       <button class="btn small ${collected ? '' : 'primary'}" data-collect="${i}" ${collected ? 'disabled' : ''} type="button">${collected ? '已收录' : '＋ 收进词块本'}</button>
@@ -2306,7 +3065,9 @@ function bindLessonDetailEvents(lesson, prog, ctx){
         if (inp) inp.focus();
         return;
       }
-      addChunk({ sentence:c.sentence, chunk:c.chunk, meaning:c.meaning, mine:'', source:lesson.title });
+      /* 词性、助记跟着一起进词块本，复习卡片上也能看到 */
+      const m = chunkMeta(c.chunk, lesson);
+      addChunk({ sentence:c.sentence, chunk:c.chunk, meaning:c.meaning, mine:'', source:lesson.title, pos:m.pos, mem:m.mnemonic });
       renderAll(); renderLessonDetail(lesson); toast('已收进词块本');
     };
   });
@@ -2666,6 +3427,9 @@ function openArticleModal(lesson){
   $('#aText').value = lesson ? (lesson.text || []).join('\n') : '';
   /* 用 map 保留空位，缺译的那句留成空行，再次保存时不会让后面的译文整体前移 */
   $('#aTextZh').value = lesson ? (lesson.textZh || []).map(z => z || '').join('\n') : '';
+  $('#aAiRaw').value = '';
+  pendingChunkNotes = {};   /* 上一次粘的重点词块不带到这一篇 */
+  if ($('#aSentCount') && !$('#aSentCount').value) $('#aSentCount').value = '10';
   $('#transStatus').textContent = '';
   updateAlignNote();
   refreshAiPrompt();
@@ -2673,6 +3437,7 @@ function openArticleModal(lesson){
   setTimeout(() => $('#aTitle').focus(), 60);
 }
 function closeArticleModal(){
+  pendingChunkNotes = {};
   $('#articleModal').hidden = true;
   $('#articleForm').reset();
   $('#aId').value = '';
@@ -2723,43 +3488,415 @@ function updateAlignNote(){
    用户常常不知道该拿什么文章来练。这里生成一段能直接粘给任意 AI 的提示词：
    难度、主题、长度、输出格式（英文逐句 + 中文逐句，正好对上下面两个输入框）都写死，
    再把词块本里还没掌握的表达式塞进去，让 AI 顺手把它们用上。 */
-const LEVEL_BRIEF = {
-  beginner: '初级：以最常用的 1500 词为主，句子短（8–14 词），避免从句套从句',
-  intermediate: '中级：以 3000 词以内的常用词为主，句子 10–18 词，可以用简单从句',
-  advanced: '高级：可以用到 5000 词左右的地道表达，句子 12–22 词，允许复杂结构'
-};
+/* 难度中文名用文件顶部已有的 LEVEL_LABEL，不要在这里再声明一份 */
+/* 挑哪几个词块塞进提示词：以前取 state.chunks 末尾 limit 条（就是最后加进来的那几条），
+   跟掌握度、跟多久没复习都没关系。现在和复习队列同序——到期日早的优先——并且带上中文意思：
+   只给英文串的话，AI 不知道这个词是「放弃」还是「分发」，用出来多半不是你要练的那个义。 */
 function pickPromptChunks(limit){
   const list = (state.chunks || []).filter(c => c && c.chunk && !c.mastered);
-  return list.slice(-limit).map(c => c.chunk);
+  list.sort((a, b) => String(a.nextReview || '').localeCompare(String(b.nextReview || '')) || String(a.added || '').localeCompare(String(b.added || '')));
+  return list.slice(0, limit).map(c => {
+    const zh = String(c.meaning || '').split(/[；;，,、]/)[0].trim();
+    return zh ? c.chunk + '（' + zh + '）' : c.chunk;
+  });
+}
+/* 句数：界面上填多少就用多少，越界或没填就按 10 句 */
+function promptSentCount(){
+  const el = $('#aSentCount');
+  const n = Number(el && el.value);
+  return Number.isFinite(n) && n >= 4 && n <= 30 ? Math.round(n) : 10;
+}
+/* 要挑几个词块，随句数走：写死「6–12 个」和「每 2–3 句一个搭配」是打架的，
+   默认 10 句只有 4 个搭配位，AI 想要凑够 12 个就只能塞孤立单词。约每 1.4 句一个词块最合手。 */
+function promptChunkCount(count){
+  return Math.min(12, Math.max(4, Math.round(count * 0.7)));
 }
 function buildAiPrompt(){
   const lvEl = $('#aLevel');
   const level = (lvEl && lvEl.value) || 'intermediate';
+  const levelZh = LEVEL_LABEL[level] || LEVEL_LABEL.intermediate;
   const topicEl = $('#aTopic');
   const topic = String((topicEl && topicEl.value) || '').trim() || '日常生活';
-  const words = pickPromptChunks(10);
+  const count = promptSentCount();
+  const chunkCount = promptChunkCount(count);
+  /* 提示词按用户给的版本落地，只把「等级 / 主题 / 句数」三个参数填进去。
+     末尾那行「还没掌握的表达」是可选的补充：词块本空着的时候整行都不出现。 */
   const lines = [
-    '你是英语学习材料作者。请为中文母语者写一篇用于「语块精读」的英文短文。',
-    '',
-    '要求：',
-    '- 难度：' + (LEVEL_BRIEF[level] || LEVEL_BRIEF.intermediate),
-    '- 主题：' + topic,
-    '- 长度：10–14 句，130–200 词；前后连贯成一篇完整短文，不要写成互不相关的例句',
-    '- 用自然地道的真实表达，不要生僻词，不要标题、编号、加粗或任何 Markdown 符号',
-    '- 每句在句号/问号/感叹号处结束，别用分号把好几层意思连成一长句（要能逐句翻译）'
+    "你是一位英语教学材料作者。请按照我指定的等级生成一篇英语短文，并附上逐句对应的中文翻译。",
+    "",
+    "## 参数",
+    `- 等级：${levelZh}`,
+    `- 主题：${topic}`,
+    `- 句数：${count}`,
+    "",
+    "## 写作要求",
+    "1. 英文自然、地道，符合指定等级，不要写成教科书式生硬句子。",
+    "2. 每句话只用一个句号、问号或感叹号结尾。不要用分号把多个意思串成一句。",
+    "3. 不要在句中写句点：别用缩写句点（Mr.、Mrs.、Dr.、a.m.、p.m.、U.S.、U.K.、e.g.、i.e.、etc.），别写小数（如 3.14），也别用省略号。程序只按句号分句，多一个点就会把句子切碎。",
+    "4. 英文句子不要加编号（不要写 1. 2. 3.），每句单独一行即可。",
+    `5. 每 1–2 句自然出现一个常用搭配或短语，全文至少 ${chunkCount} 个，方便学习者积累词块（常见短语见下面第 7 条的对照）。`,
+    "6. 中文翻译必须逐句对应：英文第 1 句对应中文第 1 句，英文第 2 句对应中文第 2 句，以此类推。句数必须完全一致。",
+    "7. 中文翻译通顺自然，不要逐字硬译。常见短语请使用最通用的中文对应，例如：",
+    "   - make a decision → 做决定",
+    "   - give up → 放弃",
+    "   - in the end → 最终",
+    "   - look forward to → 期待",
+    "   - take care of → 照顾",
+    "8. 中文句子也不要加编号，每句单独一行。",
+    "",
+    "## 难度标准",
+    "- " + levelZh + "：" + (LEVEL_STANDARD[level] || LEVEL_STANDARD.intermediate),
+    "",
+    "## 输出格式（严格遵守，不要添加额外说明）",
+    "",
+    "### 英文标题",
+    "[英文标题]",
+    "",
+    "### 中文标题",
+    "[中文标题]",
+    "",
+    "### 英文原文",
+    "第 1 句。",
+    "第 2 句。",
+    "第 3 句。",
+    "...",
+    "",
+    "### 中文翻译",
+    "第 1 句中文。",
+    "第 2 句中文。",
+    "第 3 句中文。",
+    "...",
+    "",
+    "### 重点词块（这段会一起导入，格式不要改）",
+    `从上面挑 ${chunkCount} 个值得记的搭配或单词，一行一条，严格按这个格式：`,
+    "- 词块（词性）：中文意思；另一个常见意思（没有就不写）｜助记：一句话的记忆钩子",
+    "",
+    "要求：",
+    "1. 词性必须标出来，用 n.、v.、adj.、adv.、prep.、conj.、phr. 这些缩写；短语写成 v.+n.、adj.+n.、prep.+n. 这类组合。",
+    "2. 一个单词或短语有好几个常见意思时，全都要列出来，用「；」隔开，不要只给一个。",
+    "3. 每个词块都要附助记：词根词缀、搭配场景、联想都行，一句话（30 字以内）；不要把中文意思换句话再说一遍（「记住它表示放弃」这种不算助记，会被程序丢掉）。",
+    "4. 中文意思用最通用的说法，方便直接收进词块本。",
+    "5. 每个词块都必须原样出现在上面的英文原文里（大小写可以不同，词形不要改），没出现在原文里的不要写——程序要回原文里逐条找位置，找不到的词块就丢了。",
+    "6. 一行一条，不要加编号，不要在词块前后写别的说明；这一段会被程序逐行解析。",
+    "",
+    "例如：",
+    "- make a decision（v.+n.）：做决定；下定决心｜助记：把选择「做」出来，就不是空想",
+    "- in the end（prep. phr.）：最终；最后｜助记：走到路的尽头就是最终"
   ];
-  if (words.length) lines.push('- 请自然地用上这些表达（能用几个算几个，不要硬塞）：' + words.join('、'));
-  lines.push('');
-  lines.push('输出格式：严格两段，用下面两个标记分开，标记本身照抄。');
-  lines.push('【英文】');
-  lines.push('一行一句英文，共 10–14 行。');
-  lines.push('【中文】');
-  lines.push('与英文逐行一一对应的中文翻译，行数必须与英文完全相同，不要合并或拆分句子。');
-  return lines.join('\n');
+  const words = pickPromptChunks(8);
+  if (words.length){
+    const least = Math.min(3, words.length);
+    lines.push(
+      "",
+      "（重要）下面 " + words.length + " 个是我还没掌握的表达（括号里是我想练的意思），请自然地用进正文，至少用上 " + least + " 个；不要硬塞，也不要单独列成一段：",
+      words.map(w => "- " + w).join("\n")
+    );
+  }
+  return lines.join("\n");
 }
 function refreshAiPrompt(){
   const box = $('#aPrompt');
   if (box) box.value = buildAiPrompt();
+}
+/* ========== 把 AI 的整段回答拆成「标题 / 英文 / 中文 / 重点词块」 ==========
+   提示词输出的是 Markdown 小节（### 英文标题 / ### 英文原文 / ### 中文翻译 / ### 重点词块），
+   让用户整段粘进一个框最省事，所以这里按小节切，顺手剥掉 ###、**、[标题]、1. 这些壳子。
+   重点词块那节按提示词约定的格式解析成「词性 / 多义 / 助记」，随文章一起存进 lesson.chunkNotes，
+   卡片上就能和内置文章一样显示（见 chunkMeta）。解析不出来就只计数，不影响英文和中文。 */
+function aiSectionKey(name){
+  const t = String(name || '').replace(/[#*【】\[\]]/g, '').trim();
+  if (!t) return '';
+  if (/英文标题|english\s*title/i.test(t)) return 'titleEn';
+  if (/中文标题|chinese\s*title/i.test(t)) return 'titleZh';
+  if (/重点词块|词块|短语|表达|phrases|vocab/i.test(t)) return 'skip';
+  if (/英文|english/i.test(t)) return 'en';
+  if (/中文|chinese|翻译|译文/i.test(t)) return 'zh';
+  return '';
+}
+function cleanAiLine(line){
+  return String(line == null ? '' : line)
+    .replace(/^\s*[-*•]\s+/, '')
+    .replace(/^\s*\d{1,2}\s*[.、)]\s*/, '')
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .replace(/^\[(.*)\]$/, '$1')
+    .trim();
+}
+/* AI 写回来的助记先过一遍筛子：把中文意思换句话再说一遍（「记住它表示放弃」）、
+   或者只写「记住这个搭配」「多读几遍」，都不是记忆钩子，收进词块本只会在复习卡上占一行。
+   宁可这一格空着（卡片上不显示助记那行），也别让用户把复述当成助记去背。 */
+const AI_NOTE_BAN = /^(?:记住|牢记|背下|背过|多读|多背|多练|这个|该词|所谓|总之|意思是|就是|它的意思)/;
+function cleanAiMnemonic(mnemonic, senses){
+  const n = String(mnemonic == null ? '' : mnemonic).replace(/^助记\s*[：:]?\s*/, '').replace(/\s+/g, ' ').trim();
+  if (!n || n.length < 4) return '';
+  if (AI_NOTE_BAN.test(n)) return '';
+  const first = senses && senses[0] ? String(senses[0]).trim() : '';
+  /* 助记里直接出现了主意思，多半就是把义项复述了一遍 */
+  if (first.length >= 2 && n.indexOf(first) >= 0) return '';
+  return n.slice(0, 80);
+}
+/* 一行重点词块 → { chunk, pos, senses, mnemonic }
+   约定格式（见 buildAiPrompt）：「- 词块（词性）：意思；另一个意思｜助记：一句话」，
+   也容错没写词性、没写助记、用了半角括号或冒号的版本。 */
+function parseChunkLine(line){
+  const t = cleanAiLine(line);
+  if (!t) return null;
+  let head = '';
+  let pos = '';
+  let body = '';
+  const withPos = t.match(/^(.*?)\s*[（(]\s*([^）)]{1,20})\s*[）)]\s*[：:]\s*(.+)$/);
+  if (withPos){ head = withPos[1]; pos = withPos[2]; body = withPos[3]; }
+  else {
+    const plain = t.match(/^(.*?)\s*[：:]\s*(.+)$/);
+    if (!plain) return null;
+    head = plain[1]; body = plain[2];
+  }
+  let mnemonic = '';
+  const halves = String(body).split(/[｜|]/);
+  if (halves.length > 1){
+    body = halves.shift();
+    mnemonic = halves.join('｜').replace(/^\s*助记\s*[：:]?\s*/, '').trim();
+  }
+  const senses = String(body).split(/[；;]/).map(s => s.trim()).filter(Boolean);
+  const chunk = String(head).replace(/^[-*•\s]+/, '').replace(/[*`]/g, '').trim();
+  if (!chunk || !senses.length) return null;
+  return { chunk, pos: pos.trim(), senses, mnemonic: cleanAiMnemonic(mnemonic, senses) };
+}
+/* 小节名和内容挤在同一行的写法：「### 英文标题：A Quiet Morning」「**中文翻译**：…」
+   AI 很爱这么写，以前整行被当成正文，标题就丢了。 */
+function aiInlineSection(line){
+  const m = String(line || '').match(/^\s*(?:#{1,6}\s*)?(?:[-*•]\s*)?(?:\*\*)?(.{1,24}?)(?:\*\*)?\s*[：:]\s*(.+)$/);
+  if (!m) return null;
+  const key = aiSectionKey(m[1]);
+  if (!key) return null;
+  return { key, rest: m[2] };
+}
+function parseAiOutput(raw){
+  const text = String(raw || '').replace(/\r\n?/g, '\n');
+  if (!text.trim()) return null;
+  const out = { titleEn: '', titleZh: '', en: [], zh: [], blockLines: 0, chunks: [], ignored: 0 };
+  /* 一个小节标记都没有的时候，就把整段当英文（老提示词、或者用户只贴了正文都能用） */
+  let cur = 'en';
+  /* 一行内容按当前小节归位；行内小节用同一个入口，保证「标题：内容」和正常写法行为一致 */
+  const feed = (key, rawLine) => {
+    const t = cleanAiLine(rawLine);
+    if (!t) return;
+    if (key === 'skip'){
+      out.blockLines++;
+      const parsedChunk = parseChunkLine(rawLine);
+      if (parsedChunk) out.chunks.push(parsedChunk);
+      return;
+    }
+    if (key === 'titleEn'){ if (!out.titleEn) out.titleEn = t; return; }
+    if (key === 'titleZh'){ if (!out.titleZh) out.titleZh = t; return; }
+    if (key === 'zh'){ out.zh.push(t); return; }
+    /* 只对英文段做过滤：「好的，以下是文章」这类中文说明不该混进英文，
+       但中文段本来就该是纯中文，不能一刀切 */
+    const hasLatin = /[A-Za-z]{2,}/.test(t);
+    const hasCjk = /[\u4e00-\u9fa5]/.test(t);
+    if (!hasLatin && hasCjk){ out.ignored++; return; }
+    out.en.push(t);
+  };
+  text.split('\n').forEach(line => {
+    /* 顺序很重要：先看「小节名：内容」同行写法，再看整行小节名。
+       反过来的话「### 英文标题：A Quiet Morning」会被当成小节头，标题就丢了 */
+    const inline = aiInlineSection(line);
+    if (inline){
+      cur = inline.key;
+      if (inline.rest && inline.rest.trim()) feed(inline.key, inline.rest);
+      return;
+    }
+    const head = line.match(/^\s*(?:#{1,6}\s*(.+?)|【(.+?)】|\*\*(.{1,20})\*\*)\s*$/);
+    if (head){
+      const key = aiSectionKey(head[1] || head[2] || head[3]);
+      if (key){ cur = key; return; }
+    }
+    /* 光秃秃一行小节名（「英文原文：」冒号后什么都没写也算） */
+    const bare = line.trim();
+    if (bare && bare.length <= 16 && !/[。！？；]/.test(bare)){
+      const bareKey = aiSectionKey(bare);
+      if (bareKey){ cur = bareKey; return; }
+    }
+    feed(cur, line);
+  });
+  /* 英文再按行切一遍句子：AI 有时一行塞两句，也有一行忘了写句号 */
+  const en = [];
+  out.en.forEach(line => {
+    const parts = splitEnglishSentences(line);
+    if (parts.length) en.push(...parts); else if (line) en.push(line);
+  });
+  out.en = en;
+  out.zh = out.zh.map(s => s.trim()).filter(Boolean);
+  return out;
+}
+/* 粘贴进来的重点词块先存在这里，点「保存文章」时才挂到文章上：
+   这时还没有文章对象，也没法知道用户会不会取消。 */
+let pendingChunkNotes = {};
+function chunkNotesFromParsed(chunks){
+  const out = {};
+  (chunks || []).forEach(c => {
+    const key = metaKey(c.chunk);
+    if (!key) return;
+    /* chunk 留着原文写法：对齐到自动提取的词块时要用原句里的样子，不能全小写 */
+    out[key] = { chunk: c.chunk, pos: c.pos || '', senses: (c.senses || []).slice(0, 4), mnemonic: c.mnemonic || '' };
+  });
+  return out;
+}
+/* 词块的两把键：
+   strict —— 只去标点、压空格，用来判断「是不是同一个词块」和「在哪一句里」；
+   loose  —— 再去掉 the/a/an 这类虚词，用来判断「谁包含谁」（"morning light" 是 "in the morning light" 的一部分）。 */
+const CHUNK_MATCH_STOP = new Set(['the', 'a', 'an', 'to', 'of', 'and', 'or', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'this', 'that']);
+function chunkStrictKey(s){
+  return metaKey(s).replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function chunkLooseKey(s){
+  const words = chunkStrictKey(s).split(' ').filter(w => w && !CHUNK_MATCH_STOP.has(w));
+  return words.join(' ');
+}
+/* 这个词块在哪一句里（按完整词序列匹配，"in the end" 不会误配到只含 end 的句子） */
+function findChunkSentenceIndex(lesson, chunk){
+  const target = ' ' + chunkStrictKey(chunk) + ' ';
+  const text = (lesson && Array.isArray(lesson.text)) ? lesson.text : [];
+  if (target.trim().length < 3) return -1;
+  return text.findIndex(s => (' ' + chunkStrictKey(s) + ' ').includes(target));
+}
+/* 把 AI 给的重点词块与这篇自动提取出来的词块对齐，然后把词性/多义/助记挂上去：
+   这一步以前只做「键完全相同才挂」，而自动提取的是 2–3 词的机械 n-gram（"morning light comes"），
+   AI 写的是 "morning light"，十有八九对不上，于是卡片上永远只有中文意思。
+   现在的做法：
+     1) AI 说是重点、提取却没提出来（或者提成了更长的碎片）的，按原文句子补进来并替换碎片；
+     2) 挂信息时严格键 + 包含关系都认；
+     3) 中文意思空着的顺手用第一个义项补上。
+   返回补了几条中文意思（沿用 applyChunkNotes 的旧语义）。 */
+function applyChunkNotes(lesson, notes){
+  const keys = Object.keys(notes || {});
+  if (!lesson || !keys.length) return 0;
+  if (!Array.isArray(lesson.chunks)) lesson.chunks = [];
+  if (!lesson.chunkNotes || typeof lesson.chunkNotes !== 'object') lesson.chunkNotes = {};
+  const entries = keys.map(k => ({ raw: (notes[k] && notes[k].chunk) || k, key: chunkStrictKey(k), loose: chunkLooseKey(k), note: notes[k] }))
+    .filter(e => e.key);
+
+  /* 1) 补齐 AI 提到的词块（替换掉被它包含的机械碎片） */
+  entries.forEach(e => {
+    const same = lesson.chunks.findIndex(c => chunkStrictKey(c.chunk) === e.key);
+    if (same >= 0) return;
+    const sentIdx = findChunkSentenceIndex(lesson, e.raw);
+    if (sentIdx < 0) return;
+    const item = normalizeChunk({
+      chunk: e.raw,
+      sentence: lesson.text[sentIdx],
+      meaning: (e.note.senses || [])[0] || '',
+      sentIdx
+    });
+    const fragment = lesson.chunks.findIndex(c => {
+      const ck = chunkLooseKey(c.chunk);
+      return ck && e.loose && ck !== e.loose && ck.includes(e.loose);
+    });
+    /* 以 AI 词块的末词开头的机械碎片（"decision to get" ← "make a decision"）也是跨了边界的，
+       和上面那种「包含关系」一样用 AI 说的那个换掉，别在卡片上留一堆没意思的碎片 */
+    const tail = e.loose ? e.loose.split(' ').slice(-1)[0] : '';
+    const crossed = tail ? lesson.chunks.findIndex(c => {
+      const ck = chunkLooseKey(c.chunk);
+      const words = ck.split(' ');
+      return ck && ck !== e.loose && words.length > 1 && words[0] === tail;
+    }) : -1;
+    if (fragment >= 0) lesson.chunks.splice(fragment, 1, item);
+    else if (crossed >= 0) lesson.chunks.splice(crossed, 1, item);
+    else lesson.chunks.push(item);
+  });
+
+  /* 1b) AI 已经点名词块时，把跨出边界的机械碎片清掉：
+     自动提取按 2–3 词滑动，"I make a decision to get up" 会同时产出 "make a decision"（词典里有）
+     和 "decision to get"（跨了意群）。AI 点名的既然更准，这种与它首/末词跨接、又不含它整体的碎片就删掉。 */
+  const aiLoose = entries.map(e => e.loose).filter(Boolean);
+  if (aiLoose.length){
+    lesson.chunks = lesson.chunks.filter(c => {
+      const lk = chunkLooseKey(c.chunk);
+      if (!lk || aiLoose.indexOf(lk) >= 0) return true;
+      const words = lk.split(' ');
+      for (const x of aiLoose){
+        const xs = x.split(' ');
+        if (lk.includes(x) || x.includes(lk)) return false;
+        if (words[0] === xs[xs.length - 1]) return false;
+        if (xs[0] === words[words.length - 1] && words.length > 1) return false;
+      }
+      return true;
+    });
+  }
+
+  /* 2) 逐个挂信息：同一个词块若既在 AI 回答里、又在旧数据里，字段互补 */
+  const used = new Set();
+  let filled = 0;
+  lesson.chunks.forEach(c => {
+    const sk = chunkStrictKey(c.chunk);
+    const lk = chunkLooseKey(c.chunk);
+    const e = entries.find(x => x.key === sk) ||
+      entries.find(x => x.loose && lk && (x.loose === lk || lk.includes(x.loose) || x.loose.includes(lk)));
+    if (!e) return;
+    const key = metaKey(c.chunk);
+    const prev = lesson.chunkNotes[key] || { pos: '', senses: [], mnemonic: '' };
+    const merged = {
+      pos: e.note.pos || prev.pos || '',
+      senses: ((e.note.senses && e.note.senses.length) ? e.note.senses : (prev.senses || [])).slice(0, 4),
+      mnemonic: e.note.mnemonic || prev.mnemonic || ''
+    };
+    if (!merged.pos && !merged.senses.length && !merged.mnemonic) return;
+    lesson.chunkNotes[key] = merged;
+    used.add(key);
+    if (!c.meaning && merged.senses[0]){ c.meaning = merged.senses[0]; filled++; }
+  });
+  /* 3) 原文里找不到对应句子的词块（AI 顺口多列的）也留着信息：
+        这次不显示成卡片，但下次编辑、重新分析或换个句子时还能用上 */
+  entries.forEach(e => {
+    const key = metaKey(e.raw);
+    if (!key || used.has(key)) return;
+    const n = e.note;
+    if (!n || (!n.pos && !(n.senses || []).length && !n.mnemonic)) return;
+    lesson.chunkNotes[key] = { pos: n.pos || '', senses: (n.senses || []).slice(0, 4), mnemonic: n.mnemonic || '' };
+  });
+  return filled;
+}
+function fillFromAiOutput(){
+  const box = $('#aAiRaw');
+  const parsed = parseAiOutput(box ? box.value : '');
+  if (!parsed || (!parsed.en.length && !parsed.zh.length)){
+    toast('没认出内容：把 AI 的整段回答原样粘进来，里面应该带「### 英文原文」和「### 中文翻译」');
+    return;
+  }
+  const tEn = $('#aTitle'); const tZh = $('#aTitleZh');
+  /* 这一下就是「用 AI 的这篇替换掉表单里的」，所以标题也直接覆盖：
+     以前只在输入框空着时才填，换一篇时旧标题会赖着不走，看着就像「没分好」 */
+  if (tEn && parsed.titleEn) tEn.value = parsed.titleEn;
+  if (tZh && parsed.titleZh) tZh.value = parsed.titleZh;
+  $('#aText').value = parsed.en.join('\n');
+  $('#aTextZh').value = parsed.zh.join('\n');
+  pendingChunkNotes = chunkNotesFromParsed(parsed.chunks);
+  updateAlignNote();
+
+  const noteCount = Object.keys(pendingChunkNotes).length;
+  const parts = [`已填入 ${parsed.en.length} 句英文`];
+  if (parsed.zh.length) parts.push(`${parsed.zh.length} 句中文`);
+  if (noteCount) parts.push(`${noteCount} 个词块带上了词性、多义和助记`);
+  else if (parsed.blockLines) parts.push('重点词块那段没认出格式');
+  if (parsed.ignored) parts.push(`跳过 ${parsed.ignored} 行说明`);
+  toast(parts.join('，'));
+
+  /* 按钮下面写清楚到底分到了什么，免得「填没填」全靠猜 */
+  const note = $('#aiParsedNote');
+  if (note){
+    const bits = [];
+    bits.push(parsed.titleEn ? '英文标题「' + esc(parsed.titleEn) + '」' : '英文标题没找到');
+    bits.push(parsed.titleZh ? '中文标题「' + esc(parsed.titleZh) + '」' : '中文标题没找到');
+    bits.push('英文 ' + parsed.en.length + ' 句');
+    bits.push('中文 ' + parsed.zh.length + ' 句');
+    if (parsed.chunks.length){
+      bits.push('重点词块 ' + parsed.chunks.length + ' 个：' + parsed.chunks.slice(0, 5).map(c => esc(c.chunk) + (c.pos ? '（' + esc(c.pos) + '）' : '')).join('、') + (parsed.chunks.length > 5 ? ' 等' : ''));
+    } else if (parsed.blockLines){
+      bits.push('重点词块那 ' + parsed.blockLines + ' 行没按「- 词块（词性）：意思｜助记：…」写');
+    }
+    note.innerHTML = '已识别：' + bits.join(' · ');
+    note.className = parsed.chunks.length || !parsed.blockLines ? 'note' : 'note danger';
+  }
 }
 /* 复制到剪贴板：优先异步剪贴板，没有权限就退回到隐藏 textarea + execCommand */
 async function copyText(text){
@@ -2864,7 +4001,8 @@ function renderChunks(){
   if (chunkSource !== 'all') list = list.filter(c => String(c.source || '').trim() === chunkSource);
   if (searchTerm){
     const q = searchTerm.toLowerCase();
-    list = list.filter(c => (c.chunk + ' ' + c.sentence + ' ' + c.meaning + ' ' + (c.mine||'') + ' ' + (c.source||'')).toLowerCase().includes(q));
+    /* 其他义项也参与搜索：搜「轻的」应该能找到 light。只在这条分支里算，列表平时不白算 */
+    list = list.filter(c => (c.chunk + ' ' + c.sentence + ' ' + c.meaning + ' ' + (c.mine||'') + ' ' + (c.source||'') + ' ' + metaSenses(chunkMeta(c.chunk), c.meaning).join(' ')).toLowerCase().includes(q));
   }
   if (sortBy === 'new') list.sort((a, b) => b.added.localeCompare(a.added));
   else if (sortBy === 'due') list.sort((a, b) => { if (a.mastered !== b.mastered) return a.mastered ? 1 : -1; return a.nextReview.localeCompare(b.nextReview); });
@@ -2880,10 +4018,20 @@ function renderChunks(){
   box.innerHTML = list.map(c => {
     const isDue = !c.mastered && c.nextReview <= t;
     const badge = c.mastered ? '<span class="badge ok">已掌握</span>' : isDue ? '<span class="badge due">今日待复习</span>' : `<span class="badge wait">${esc(c.nextReview)} 复习</span>`;
+    /* 词性 / 助记：收集时存了下来就用，老词块没有就回查内置表（AI 写的文章只有本文章里有） */
+    const meta = chunkMeta(c.chunk);
+    const pos = c.pos || meta.pos;
+    const mem = c.mem || meta.mnemonic;
+    /* 其他义项不预存：词典是启动后才加载的，换了词典也该跟着变，所以现查 */
+    const senses = metaSenses(meta, c.meaning);
+    /* 老词块可能没填中文意思，拿离线词典的首义兜底（只显示，不写回数据） */
+    const meaning = c.meaning || dictGloss(c.chunk);
     return `<div class="chunk-card">
-      <div class="chunk-head"><span class="chunk-title">${esc(c.chunk)}${speakBtn(c.chunk)}</span>${badge}<label class="pick" title="勾选后可批量删除"><input type="checkbox" data-pick="${esc(c.id)}"${pickedIds.has(c.id) ? ' checked' : ''}></label></div>
+      <div class="chunk-head"><span class="chunk-title">${esc(c.chunk)}${speakBtn(c.chunk)}</span>${pos ? `<span class="ci-pos">${esc(pos)}</span>` : ''}${badge}<label class="pick" title="勾选后可批量删除"><input type="checkbox" data-pick="${esc(c.id)}"${pickedIds.has(c.id) ? ' checked' : ''}></label></div>
       <p class="sent"><span class="lbl">原句</span>${esc(c.sentence)}${speakBtn(c.sentence)}</p>
-      <p><span class="lbl">意思</span>${esc(c.meaning)}</p>
+      <p><span class="lbl">意思</span>${esc(meaning)}</p>
+      ${senses.length ? `<p class="senses"><span class="lbl">其他义项</span>${senses.map(esc).join('；')}</p>` : ''}
+      ${mem ? `<p class="mem"><span class="lbl">助记</span>${esc(mem)}</p>` : ''}
       ${c.mine ? `<p class="mine"><span class="lbl">我的</span>${esc(c.mine)}</p>` : ''}
       <div class="chunk-foot">
         <span>${c.source ? '来源：' + esc(c.source) : '来源：—'}</span>
@@ -2968,6 +4116,8 @@ function renderReview(){
   const pct = Math.round((reviewState.index / q.length) * 100);
   const stageLabel = c.mastered ? '已掌握' : `第 ${(c.stage || 0) + 1} 次复习`;
   const hasChunk = sentenceHasChunk(c.sentence, c.chunk);
+  /* 揭晓后顺手带上其他义项：记住了「光」，也该想起来它还能当形容词 */
+  const rvExtra = metaSenses(chunkMeta(c.chunk), c.meaning);
   box.innerHTML = `
     <div class="rev-mode">
       <button type="button" data-mode="en2zh" class="${reviewMode === 'zh2en' ? '' : 'on'}">英 → 中</button>
@@ -2977,11 +4127,12 @@ function renderReview(){
     <div class="review-card">
       <div class="review-tag">${reviewMode === 'zh2en' ? '看中文，先自己说一遍英文' : (hasChunk ? '先读原句，想想空格里是什么' : '直接看答案吧')}</div>
       ${reviewMode === 'zh2en'
-        ? `<p class="rev-prompt-zh">${esc(c.meaning || '（这个词块还没有中文意思）')}</p>`
+        ? `<p class="rev-prompt-zh">${esc(c.meaning || dictGloss(c.chunk) || '（这个词块还没有中文意思）')}</p>`
         : `<p class="review-sentence">${blankSentence(c.sentence, c.chunk)}</p>`}
       ${reviewState.revealed ? `
         <div class="review-answer">
-          <p class="c">${esc(c.chunk)}${speakBtn(c.chunk)}</p><p class="m">${esc(c.meaning)}</p>
+          <p class="c">${esc(c.chunk)}${speakBtn(c.chunk)}</p><p class="m">${esc(c.meaning || dictGloss(c.chunk))}</p>
+          ${rvExtra.length ? `<p class="rev-extra">其他义项：${rvExtra.map(esc).join('；')}</p>` : ''}
           ${c.sentence ? `<p class="mine" style="font-style:normal;font-size:12.5px;">原句：${esc(c.sentence)}${speakBtn(c.sentence)}</p>` : ''}
           ${c.mine ? `<p class="mine">我的句子：${esc(c.mine)}</p>` : ''}
           ${c.source ? `<p class="mine" style="font-style:normal;font-size:12.5px;">来源：${esc(c.source)}</p>` : ''}
@@ -3250,6 +4401,20 @@ function mergeStates(local, remote){
     (Array.isArray(r.extraChunks) ? r.extraChunks : []).concat(Array.isArray(l.extraChunks) ? l.extraChunks : []).forEach(x => {
       if (x && !extra.some(y => String(y.chunk || '').toLowerCase() === String(x.chunk || '').toLowerCase())) extra.push(x);
     });
+    /* 词块的词性 / 其他义项 / 助记（来自 AI 回答或内置表）：按词块键并集，同一个键本机优先、缺的字段取云端 */
+    const notesR = r.chunkNotes && typeof r.chunkNotes === 'object' ? r.chunkNotes : {};
+    const notesL = l.chunkNotes && typeof l.chunkNotes === 'object' ? l.chunkNotes : {};
+    const notesMerged = {};
+    keys(notesR).concat(keys(notesL)).forEach(k => {
+      if (notesMerged[k]) return;
+      const a = notesL[k] || {}, b = notesR[k] || {};
+      const one = {
+        pos: a.pos || b.pos || '',
+        senses: (Array.isArray(a.senses) && a.senses.length ? a.senses : (Array.isArray(b.senses) ? b.senses : [])).slice(0, 4),
+        mnemonic: a.mnemonic || b.mnemonic || ''
+      };
+      if (one.pos || one.senses.length || one.mnemonic) notesMerged[k] = one;
+    });
     const entry = {
       chunkMeaning: Object.assign({}, r.chunkMeaning || {}, l.chunkMeaning || {}),
       chunkSentZh: Object.assign({}, r.chunkSentZh || {}, l.chunkSentZh || {}),
@@ -3260,6 +4425,7 @@ function mergeStates(local, remote){
        对不上，白触发一次「本机改过了」的同步。有值才写。 */
     const zh = Array.isArray(l.textZh) && l.textZh.length ? l.textZh : r.textZh;
     if (Array.isArray(zh) && zh.length) entry.textZh = zh;
+    if (keys(notesMerged).length) entry.chunkNotes = notesMerged;
     lessonEdits[id] = entry;
   });
 
@@ -3572,6 +4738,62 @@ create policy "own update" on public.states for update using (auth.uid() = user_
 }
 
 /* ========== 初始化 ========== */
+/* 接线帮助函数：元素不存在也不抛错，只把选择器记下来。
+   早先这里全是裸的 $('#x').onclick = ...：改页面时漏掉或改名一个 id，init() 就在那一行
+   抛 TypeError，后面的接线、renderAll()、定时器全都不执行，表现是「页面能打开但按钮全哑」，
+   而且没有任何提示（整个 app.js 只有 2 处 console）。 */
+const bindMisses = [];
+function bind(target, evt, fn){
+  const el = typeof target === 'string' ? $(target) : target;
+  if (!el){ if (typeof target === 'string') bindMisses.push(target); return null; }
+  el.addEventListener(evt, fn);
+  return el;
+}
+
+/* 初始化出问题时，一定在界面上留一句看得懂的话：不打开控制台也知道发生了什么、笔记有没有丢 */
+function reportUiIssue(title, detail){
+  try{
+    const prev = document.getElementById('bootIssue');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    const bar = document.createElement('div');
+    bar.id = 'bootIssue';
+    bar.setAttribute('role', 'alert');
+    bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;padding:12px 40px 12px 14px;'
+      + 'border-radius:8px;background:#7f1d1d;color:#fff;font:13px/1.6 system-ui,"Microsoft YaHei",sans-serif;'
+      + 'white-space:pre-wrap;word-break:break-word;box-shadow:0 6px 24px rgba(0,0,0,.35)';
+    const head = document.createElement('div');
+    head.style.cssText = 'font-weight:600;margin-bottom:2px';
+    head.textContent = title;
+    const body = document.createElement('div');
+    body.textContent = detail;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '关闭';
+    close.style.cssText = 'position:absolute;top:8px;right:10px;border:0;background:none;color:#fff;'
+      + 'font:12px system-ui,sans-serif;cursor:pointer;opacity:.85';
+    close.onclick = () => { if (bar.parentNode) bar.parentNode.removeChild(bar); };
+    bar.appendChild(head); bar.appendChild(body); bar.appendChild(close);
+    (document.body || document.documentElement).appendChild(bar);
+  }catch(e){}
+}
+
+function boot(){
+  try{
+    init();
+  }catch(err){
+    console.error('[init] 界面初始化失败', err);
+    reportUiIssue('界面初始化失败', ((err && err.message) || String(err))
+      + '\n你的笔记还在浏览器本地存储里，没有被删除。刷新页面可以再试一次；反复出现请把这条信息反馈给开发者。');
+    throw err;   // 保留完整栈，方便在 DevTools 里看
+  }
+  if (bindMisses.length){
+    /* 只有改过 HTML 才会出现；用户自己处理不了，所以给一条可关闭的提示，不弹窗打断 */
+    console.warn('[init] 这些元素没找到，相关操作不会响应：' + bindMisses.join(', '));
+    reportUiIssue('界面元素缺失（不影响已有笔记）', bindMisses.join(', ')
+      + '\n这些按钮或输入框暂时不会响应。多半是页面文件与脚本版本不一致，刷新或重新安装一般能修好。');
+  }
+}
+
 function init(){
   if (pruneLogs()) saveState();
   if (newerDataVersion){
@@ -3597,10 +4819,10 @@ function init(){
   window.showPage = showPage;
   $$('.tab').forEach(tab => { tab.onclick = () => showPage(tab.dataset.page); });
 
-  $('#btnAddToday').onclick  = () => openModal();
-  $('#btnAddChunks').onclick = () => openModal();
-  $('#btnGoLearn').onclick   = () => showPage('learn');
-  $('#btnGoReview').onclick  = () => { reviewState = { queue:[], index:0, revealed:false, goodCount:0, total:0, wrong:[] }; showPage('review'); };
+  bind('#btnAddToday', 'click', () => openModal());
+  bind('#btnAddChunks', 'click', () => openModal());
+  bind('#btnGoLearn', 'click', () => showPage('learn'));
+  bind('#btnGoReview', 'click', () => { reviewState = { queue:[], index:0, revealed:false, goodCount:0, total:0, wrong:[] }; showPage('review'); });
 
   /* 文章卡片：原来是内联 onclick/onkeydown，CSP 只允许 'self' 脚本后那一整片会失效，
      改成事件委托。编辑/删除按钮嵌在卡片里，所以先判按钮再判卡片。 */
@@ -3622,16 +4844,16 @@ function init(){
       window.openLesson(card.dataset.lesson);
     });
   }
-  $('#levelChips').addEventListener('click', e => {
+  bind('#levelChips', 'click', e => {
     const b = e.target.closest('.chip'); if (!b) return;
     learnState.level = b.dataset.level;
     renderLearnList();
   });
 
-  $('#btnAddArticle').onclick = () => openArticleModal();
+  bind('#btnAddArticle', 'click', () => openArticleModal());
 
   /* 按等级 + 进度生成复习短文（只用现有语料，不联网） */
-  $('#btnGenLesson').onclick = () => genReviewLessonNow();
+  bind('#btnGenLesson', 'click', () => genReviewLessonNow());
 
   /* 错题本：筛选 chips + 卡片内的事件委托（CSP 不允许内联事件） */
   bindMistakeEvents();
@@ -3640,16 +4862,15 @@ function init(){
   bindGlobalSelection();
 
   /* 「让 AI 写一篇」：提示词随难度/主题变化，点复制即可粘给任意 AI */
-  const btnCopyPrompt = $('#btnCopyPrompt');
-  if (btnCopyPrompt) btnCopyPrompt.onclick = async () => {
+  bind('#btnCopyPrompt', 'click', async () => {
     refreshAiPrompt();
     const box = $('#aPrompt');
     const ok = await copyText(box ? box.value : '');
     toast(ok ? '提示词已复制，粘贴给 AI 就行' : '复制失败：可以点开文本框手动全选复制');
-  };
-  const btnRefreshPrompt = $('#btnRefreshPrompt');
-  if (btnRefreshPrompt) btnRefreshPrompt.onclick = () => { refreshAiPrompt(); toast('已按当前难度和主题重新生成'); };
-  ['#aLevel', '#aTopic'].forEach(sel => {
+  });
+  bind('#btnRefreshPrompt', 'click', () => { refreshAiPrompt(); toast('已按当前难度、主题和句数重新生成'); });
+  bind('#btnParseAi', 'click', fillFromAiOutput);
+  ['#aLevel', '#aTopic', '#aSentCount'].forEach(sel => {
     const el = $(sel);
     if (!el) return;
     el.addEventListener('input', refreshAiPrompt);
@@ -3657,7 +4878,7 @@ function init(){
   });
 
   /* 逐句翻译 */
-  $('#btnAutoTranslate').onclick = async () => {
+  bind('#btnAutoTranslate', 'click', async () => {
     const en = splitEnglishSentences($('#aText').value);
     if (!en.length){ toast('请先粘贴英文原文'); return; }
     const btn = $('#btnAutoTranslate');
@@ -3683,15 +4904,15 @@ function init(){
     } finally {
       btn.disabled = false;
     }
-  };
+  });
 
-  $('#btnClearZh').onclick = () => { $('#aTextZh').value = ''; updateAlignNote(); $('#transStatus').textContent = ''; toast('已清空中文翻译'); };
+  bind('#btnClearZh', 'click', () => { $('#aTextZh').value = ''; updateAlignNote(); $('#transStatus').textContent = ''; toast('已清空中文翻译'); });
 
-  $('#aText').addEventListener('input', updateAlignNote);
-  $('#aTextZh').addEventListener('input', updateAlignNote);
+  bind('#aText', 'input', updateAlignNote);
+  bind('#aTextZh', 'input', updateAlignNote);
 
   /* 保存文章 */
-  $('#articleForm').addEventListener('submit', async e => {
+  bind('#articleForm', 'submit', async e => {
     e.preventDefault();
     const id = $('#aId').value;
     const title = $('#aTitle').value.trim();
@@ -3755,10 +4976,12 @@ function init(){
       lesson.minutes = minutes;
 
       analyzeLesson(lesson, { force: textChanged, keepMeaning: true });
+      const filledNotes = applyChunkNotes(lesson, pendingChunkNotes);
       if (textChanged) clearLessonProg(lesson.id);
       saveState();
       closeArticleModal();
-      toast(textChanged ? '文章已更新，已重新分析' : '文章已更新');
+      const updated = textChanged ? '文章已更新，已重新分析' : '文章已更新';
+      toast(filledNotes ? `${updated}，${filledNotes} 个词块补上了中文意思` : updated);
       renderLearn();
     } else {
       const newLesson = normalizeLesson({
@@ -3767,6 +4990,7 @@ function init(){
         text: textArr, textZh: zhArr, minutes, chunks: [], quiz: [], cloze: []
       });
       analyzeLesson(newLesson, { force: true });
+      const filledNotes = applyChunkNotes(newLesson, pendingChunkNotes);
       if (!state.customLessons) state.customLessons = [];
       state.customLessons.unshift(newLesson);
       saveState();
@@ -3774,6 +4998,7 @@ function init(){
       const parts = [`已添加 ${newLesson.text.length} 句英文`];
       if (newLesson.textZh.filter(Boolean).length) parts.push(`${newLesson.textZh.filter(Boolean).length} 句中文`);
       if (newLesson.chunks.length) parts.push(`识别 ${newLesson.chunks.length} 个词块`);
+      if (filledNotes) parts.push(`${filledNotes} 个词块补上了中文意思`);
       if (newLesson.quiz.length) parts.push(`生成 ${newLesson.quiz.length} 道题`);
       if (newLesson.cloze.length) parts.push(`${newLesson.cloze.length} 道填空`);
       toast(parts.join('，'));
@@ -3784,9 +5009,9 @@ function init(){
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   });
-  $('#articleClose').onclick  = closeArticleModal;
-  $('#articleCancel').onclick = closeArticleModal;
-  $('#articleModal').addEventListener('click', e => { if (e.target.id === 'articleModal') closeArticleModal(); });
+  bind('#articleClose', 'click', closeArticleModal);
+  bind('#articleCancel', 'click', closeArticleModal);
+  bind('#articleModal', 'click', e => { if (e.target.id === 'articleModal') closeArticleModal(); });
 
   function toggleManual(li){
     const id = li.dataset.check; const log = ensureLog();
@@ -3794,13 +5019,13 @@ function init(){
     if (id === 'output') log.outputDone = !log.outputDone;
     touchActivity(); saveState(); renderToday();
   }
-  $('#checklist').addEventListener('click', e => { const li = e.target.closest('li.manual'); if (li) toggleManual(li); });
-  $('#checklist').addEventListener('keydown', e => {
+  bind('#checklist', 'click', e => { const li = e.target.closest('li.manual'); if (li) toggleManual(li); });
+  bind('#checklist', 'keydown', e => {
     const li = e.target.closest('li.manual'); if (!li) return;
     if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); toggleManual(li); }
   });
 
-  $('#chunkForm').addEventListener('submit', e => {
+  bind('#chunkForm', 'submit', e => {
     e.preventDefault();
     const id = $('#fId').value;
     const data = {
@@ -3821,21 +5046,21 @@ function init(){
     renderAll();
     if (learnState.lessonId){ const l = getLessonById(learnState.lessonId); if (l) renderLessonDetail(l); }
   });
-  $('#modalClose').onclick  = closeModal;
-  $('#modalCancel').onclick = closeModal;
-  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+  bind('#modalClose', 'click', closeModal);
+  bind('#modalCancel', 'click', closeModal);
+  bind('#modal', 'click', e => { if (e.target.id === 'modal') closeModal(); });
 
   let searchTimer = null;
-  $('#searchBox').addEventListener('input', e => {
+  bind('#searchBox', 'input', e => {
     /* 立刻取值，不在定时器里读事件对象 */
     const v = e.target.value;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { searchTerm = v.trim(); renderChunks(); }, 150);
   });
-  $('#filterBar').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; chunkFilter = b.dataset.f; renderChunks(); });
-  $('#sortBy').addEventListener('change', e => { sortBy = e.target.value; renderChunks(); });
-  $('#sourceFilter').addEventListener('change', e => { chunkSource = e.target.value; renderChunks(); });
-  $('#btnDelPicked').onclick = () => {
+  bind('#filterBar', 'click', e => { const b = e.target.closest('button'); if (!b) return; chunkFilter = b.dataset.f; renderChunks(); });
+  bind('#sortBy', 'change', e => { sortBy = e.target.value; renderChunks(); });
+  bind('#sourceFilter', 'change', e => { chunkSource = e.target.value; renderChunks(); });
+  bind('#btnDelPicked', 'click', () => {
     /* 只删当前还存在的：翻过筛选之后，Set 里可能留着已删除的 id */
     const ids = Array.from(pickedIds).filter(x => state.chunks.some(c => c.id === x));
     if (!ids.length){ toast('先勾选要删除的词块'); return; }
@@ -3847,29 +5072,28 @@ function init(){
     pickedIds.clear();
     saveState(); renderAll(); renderTrash();
     toast(`已删除 ${removed.length} 个词块`, { label: '撤销', run: () => { if (restoreTrashMany(removed.map(r => r.id))) toast('已恢复'); } });
-  };
-  $('#chunkList').addEventListener('change', e => {
+  });
+  bind('#chunkList', 'change', e => {
     const box = e.target.closest('[data-pick]');
     if (!box) return;
     if (box.checked) pickedIds.add(box.dataset.pick); else pickedIds.delete(box.dataset.pick);
   });
-  $('#chunkList').addEventListener('click', e => {
+  bind('#chunkList', 'click', e => {
     const editBtn = e.target.closest('[data-edit]'); const delBtn = e.target.closest('[data-del]');
     if (editBtn){ const c = state.chunks.find(x => x.id === editBtn.dataset.edit); if (c) openModal(c); }
     if (delBtn) deleteChunk(delBtn.dataset.del);
   });
 
-  $('#weekSelect').addEventListener('change', e => { state.settings.currentWeek = Number(e.target.value); saveState(); renderPlan(); });
+  bind('#weekSelect', 'change', e => { state.settings.currentWeek = Number(e.target.value); saveState(); renderPlan(); });
 
   /* 问 AI 的站点：下拉选一个就存；自己填的网址点「保存」（也支持回车） */
   const aiSel = $('#aiSiteSelect');
-  if (aiSel) aiSel.addEventListener('change', () => setAiSite(aiSel.value));
-  const aiSave = $('#btnSaveAiSite');
-  if (aiSave) aiSave.onclick = () => setAiSite($('#aiSiteUrl').value);
+  bind(aiSel, 'change', () => setAiSite(aiSel.value));
+  bind('#btnSaveAiSite', 'click', () => setAiSite($('#aiSiteUrl').value));
   const aiInput = $('#aiSiteUrl');
-  if (aiInput) aiInput.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); setAiSite(aiInput.value); } });
+  bind(aiInput, 'keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); setAiSite(aiInput.value); } });
 
-  $('#btnExport').onclick = () => {
+  bind('#btnExport', 'click', () => {
     const payload = Object.assign({}, state, { exportedAt: new Date().toISOString() });
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -3881,13 +5105,13 @@ function init(){
     state.settings.lastNag = todayStr();
     saveState();
     toast('已导出备份');
-  };
+  });
 
-  $('#btnExportCsv').onclick = exportChunksCsv;
-  $('#btnExportAnki').onclick = exportChunksAnki;
+  bind('#btnExportCsv', 'click', exportChunksCsv);
+  bind('#btnExportAnki', 'click', exportChunksAnki);
 
-  $('#btnImport').onclick = () => $('#fileInput').click();
-  $('#fileInput').addEventListener('change', e => {
+  bind('#btnImport', 'click', () => $('#fileInput').click());
+  bind('#fileInput', 'change', e => {
     const input = e.target;
     const file = input.files && input.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -3934,14 +5158,14 @@ function init(){
     reader.readAsText(file);
   });
 
-  $('#btnReset').onclick = () => {
+  bind('#btnReset', 'click', () => {
     if (!confirm('确定清空全部词块、记录和自定义文章吗？此操作不可恢复。')) return;
     if (!confirm('再确认一次：真的要清空吗？')) return;
     state = defaultState(); saveState();
     reviewState = { queue:[], index:0, revealed:false, goodCount:0, total:0, wrong:[] };
     learnState = { level:'all', lessonId:null, quizAnswers:{}, clozeValues:{}, clozeResults:{}, showTrans:false };
     renderAll(); renderPlan(); renderLearn(); toast('已清空');
-  };
+  });
 
   document.addEventListener('mousedown', e => {
     const sp = $('#selPopup');
@@ -3999,10 +5223,12 @@ function init(){
   /* 初始化完成后再允许自动上云，避免启动时的渲染触发一堆推送 */
   cloudEnabledRuntime = true;
   if (cloudReady() && cloudLoggedIn() && cloudCfg.auto) cloudBootSync();
+  /* 离线词典与词形表异步加载，加载完再刷一遍页面（没有 data/ 下的文件就什么都不做） */
+  loadOfflineData();
 
   let lastDay = todayStr();
   setInterval(() => { const now = todayStr(); if (now !== lastDay){ lastDay = now; renderAll(); } }, 60000);
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-else init();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();

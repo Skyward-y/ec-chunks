@@ -1,6 +1,6 @@
 {
   "name": "ec-chunks",
-  "version": "0.6.0",
+  "version": "0.7.1",
   "description": "语境词块本 · 把整篇文章拆成词块来背的离线英语学习 App",
   "main": "electron/main.js",
   "author": "Skyward-y",
@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "preview": "node tools/preview.js",
     "dist": "npm run dist:dir && node tools/build-installer.js && node tools/build-portable.js",
     "dist:dir": "node tools/stamp-sw.js && electron-builder --win dir",
     "stamp": "node tools/stamp-sw.js",
@@ -49,6 +50,7 @@
       "manifest.webmanifest",
       "sw.js",
       "icon.svg",
+      "data/*.json",
       "package.json"
     ],
     "electronLanguages": [

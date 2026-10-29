@@ -10,4 +10,6 @@ dist/
 .cache/
 .npm-cache/
 .tmp/
+# 词典与词形表是 tools/build-*.js 生成的（一个词一行），格式化一次就是几万行 diff
+data/
 *.md

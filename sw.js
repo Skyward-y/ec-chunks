@@ -14,12 +14,22 @@
 const CACHE_PREFIX = 'ecchunks-';
 /* 版本号由 tools/stamp-sw.js 按静态资源内容哈希重写，不要手写：手写必然忘记 bump，
  * 结果就是改了 app.js 之后老用户一直看到旧页面。 */
-const CACHE_VERSION = 'cbf3110b7f';
+const CACHE_VERSION = '9672b2a55a';
 const CACHE = CACHE_PREFIX + CACHE_VERSION;
 
 /* 安装时尽量预缓存；任何一个 404 都不应让安装失败。
    脚本也在这里预缓存：首次离线打开时如果 app.js 没进缓存，页面壳会渲染出来但一个字都点不动。 */
-const PRE_CACHE = ['./', './app.js', './pwa.js', './redirect.js', './manifest.webmanifest', './icon.svg'];
+const PRE_CACHE = [
+  './',
+  './app.js',
+  './pwa.js',
+  './redirect.js',
+  './manifest.webmanifest',
+  './icon.svg',
+  /* 离线词典约 2.3MB（单词 + 常见搭配）：预缓存了断网也能看到中文释义 */
+  './data/dict.json',
+  './data/lemma.json'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

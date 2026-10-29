@@ -25,7 +25,10 @@ const ASSETS = [
   'pwa.js',
   'redirect.js',
   'manifest.webmanifest',
-  'icon.svg'
+  'icon.svg',
+  /* 离线词典：换了词典也要让 PWA 重新装缓存，不然老用户拿到的还是旧释义 */
+  'data/dict.json',
+  'data/lemma.json'
 ];
 
 function contentHash() {

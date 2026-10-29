@@ -160,6 +160,18 @@ let server = null;
 let origin = ''; // 例：http://127.0.0.1:53124
 let win = null;
 
+// 判断某个地址是否真的和本地服务同源。
+// 不能用 url.startsWith(origin)：下面两种地址都以 origin 开头，但主机根本不是 127.0.0.1
+//   http://127.0.0.1:53124.evil.com/   —— 前缀成立，实际主机是 evil.com
+//   http://127.0.0.1:53124@evil.com/   —— userinfo 写法，前缀成立，实际主机是 evil.com
+function isSameOrigin(url, base) {
+  try {
+    return new URL(url).origin === base;
+  } catch {
+    return false; // 解析不出来的一律当站外
+  }
+}
+
 function startServer() {
   return new Promise((resolve, reject) => {
     server = http.createServer((req, res) => {
@@ -286,7 +298,7 @@ async function createWindow() {
 
   // 阻止页面被导航到站外（例如误拖进一个链接把应用顶掉）
   win.webContents.on('will-navigate', (e, url) => {
-    if (url.startsWith(origin)) return;
+    if (isSameOrigin(url, origin)) return;
     e.preventDefault();
     if (/^https?:/i.test(url)) shell.openExternal(url);
   });

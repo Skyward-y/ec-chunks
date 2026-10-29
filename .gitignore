@@ -31,6 +31,10 @@ npm-debug.log*
 # 打包工具链下载缓存（Electron zip、NSIS、Inno Setup 安装包等，几百 MB）
 .cache/
 
+# 词典原始数据（几十 MB；用 tools/build-dict.js / tools/build-lemma.js 现场生成精简版，精简结果要提交）
+data/ecdict.csv
+data/lemma.en.txt
+
 # 导出备份（含个人学习数据，不要提交）
 词块本-*.json
 词块本-*.csv

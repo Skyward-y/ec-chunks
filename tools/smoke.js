@@ -83,7 +83,8 @@ function makeEl() {
   return el;
 }
 
-function loadApp() {
+function loadApp(opts) {
+  opts = opts || {};
   const code = fs.readFileSync(APP, 'utf8');
 
   const store = new Map();
@@ -98,11 +99,13 @@ function loadApp() {
     createElement() {
       return makeEl();
     },
-    getElementById() {
-      return makeEl();
+    getElementById(id) {
+      return (opts.els && opts.els[id]) || makeEl();
     },
-    querySelector() {
-      return makeEl();
+    querySelector(s) {
+      /* 和 getElementById 一样认 opts.els：注入的元素要能被 $('#x') 取到 */
+      const extra = opts.els && opts.els[String(s).replace(/^#/, '')];
+      return extra || makeEl();
     },
     querySelectorAll() {
       return [];
@@ -142,7 +145,7 @@ function loadApp() {
     confirm: () => true,
     alert() {},
     Blob: function () {},
-    location: { href: 'http://localhost/', origin: 'http://localhost' },
+    location: { href: 'http://localhost/', origin: 'http://localhost', protocol: opts.protocol || 'http:' },
     navigator: { userAgent: 'node', language: 'zh-CN', onLine: true },
     speechSynthesis: { speak() {}, cancel() {} },
     SpeechSynthesisUtterance: function () {},
@@ -470,7 +473,7 @@ test('删文章时把它名下的错题一起清掉', () => {
 });
 
 console.log('AI 提示词');
-test('提示词带上难度、主题和词块本里还没掌握的表达式', () => {
+test('提示词是新版模板：参数填进等级/主题/句数，重点词块要词性、多义与助记', () => {
   const r = run(`(function(){
     state = defaultState();
     state.chunks = [
@@ -480,11 +483,570 @@ test('提示词带上难度、主题和词块本里还没掌握的表达式', ()
     ];
     return buildAiPrompt();
   })()`);
-  assert.ok(r.includes('中级'), '要写清难度');
-  assert.ok(r.includes('日常生活'), '没填主题就用默认主题');
-  assert.ok(r.includes('take off') && r.includes('catch up'), '要把待掌握的表达交给 AI');
+  assert.ok(r.includes('你是一位英语教学材料作者'), '开头那句照抄模板');
+  assert.ok(
+    /## 参数/.test(r) && /- 等级：中级/.test(r) && /- 主题：日常生活/.test(r) && /- 句数：10/.test(r),
+    '参数要填成当前选择',
+    r.slice(0, 120)
+  );
+  assert.ok(/## 写作要求/.test(r) && /## 难度标准/.test(r) && /## 输出格式/.test(r), '三段结构都要在');
+  assert.ok(
+    /### 英文标题/.test(r) && /### 英文原文/.test(r) && /### 中文翻译/.test(r) && /### 重点词块/.test(r),
+    '输出小节要留住'
+  );
+  assert.ok(/词性必须标出来/.test(r) && /助记/.test(r) && /好几个常见意思/.test(r), '重点词块要说清词性、多义与助记');
+  assert.ok(r.includes('take off') && r.includes('catch up'), '没掌握的表达顺手用上');
   assert.ok(!r.includes('old one'), '已掌握的不要再塞进去');
-  assert.ok(r.includes('【英文】') && r.includes('【中文】'), '要给逐句输出的格式约定');
+  assert.ok(!/【英文】/.test(r), '旧的两段式格式已经换成 Markdown 小节');
+});
+
+test('提示词按句数定词块数，并要求词块原样出现在正文里', () => {
+  const withCount = (n) => {
+    const el = makeEl();
+    el.value = String(n);
+    return loadApp({ els: { aSentCount: el } }).run('buildAiPrompt()');
+  };
+  const ten = withCount(10);
+  assert.ok(/从上面挑 7 个/.test(ten), '10 句要 7 个词块，不是写死的 6–12 个');
+  assert.ok(/全文至少 7 个/.test(ten), '写作要求和词块数要一致');
+  assert.ok(/原样出现在上面的英文原文里/.test(ten), '词块必须能在原文里对上，否则对齐时会丢');
+  assert.ok(/a\.m\./.test(ten) && /U\.S\./.test(ten), '分句的坑要在提示词里点名 a.m. / U.S.');
+  assert.ok(!/6–12 个/.test(ten), '旧的固定区间要去掉');
+  assert.ok(/从上面挑 4 个/.test(withCount(4)), '句数少，词块也少');
+  assert.ok(/从上面挑 12 个/.test(withCount(30)), '句数多也只到 12 个');
+  assert.ok(/从上面挑 7 个/.test(withCount(99)), '越界的句数回落到 10 句');
+});
+
+test('提示词只讲当前等级那一段，例子不摆两遍', () => {
+  const p = loadApp().run('buildAiPrompt()');
+  assert.ok(p.length < 1400, '提示词瘦到 1400 字以内，现在 ' + p.length);
+  assert.ok(/## 难度标准\n- 中级：/.test(p), '难度标准只给当前等级那一条');
+  assert.ok(!/初级：/.test(p) && !/高级：/.test(p), '别的等级不占字数');
+  assert.strictEqual((p.match(/look forward to/g) || []).length, 1, '常见搭配的例子只在要求 7 里出现一次');
+  assert.ok(/全文至少 7 个/.test(p), '删例子不能把词块数删掉');
+});
+
+test('待练词块按到期日挑，带上中文意思，已掌握的就不再塞进提示词', () => {
+  const a = loadApp();
+  a.run(`
+    state.chunks = [
+      { id:'1', chunk:'give up', meaning:'放弃；分发', nextReview:'2026-11-01', added:'2026-10-01' },
+      { id:'2', chunk:'in the end', meaning:'最终', nextReview:'2026-10-20', added:'2026-10-02' },
+      { id:'3', chunk:'light', meaning:'光', nextReview:'2026-10-25', added:'2026-10-03' },
+      { id:'4', chunk:'taken away', meaning:'已掌握', mastered:true, nextReview:'2026-12-01', added:'2026-09-01' }
+    ]; "ok"`);
+  assert.strictEqual(
+    a.run('pickPromptChunks(2).join(" | ")'),
+    'in the end（最终） | light（光）',
+    '按到期日挑最该练的，括号里带第一个中文意思，不再是「按加入顺序取最后几条」'
+  );
+  assert.strictEqual(a.run('pickPromptChunks(9).length'), 3, '已掌握的词块不再进提示词');
+  const prompt = a.run('buildAiPrompt()');
+  assert.ok(/至少用上 3 个/.test(prompt), '要给下限，不能只说「能用几个算几个」');
+  assert.ok(/- in the end（最终）/.test(prompt), '词块带着中文意思进提示词');
+  assert.ok(prompt.indexOf('taken away') === -1, '已掌握的不出现');
+});
+
+test('分句：缩写和小数里的句点不当句末（a.m. / U.S. / 3.50）', () => {
+  const a = loadApp();
+  const split = (s) => a.run('splitEnglishSentences(' + JSON.stringify(s) + ')').join(' | ');
+  assert.strictEqual(split('We left at 9 a.m. It was cold.'), 'We left at 9 a.m. | It was cold.');
+  assert.strictEqual(split('He lives in the U.S. She lives in Canada.'), 'He lives in the U.S. | She lives in Canada.');
+  assert.strictEqual(split('It cost $3.50. I paid cash.'), 'It cost $3.50. | I paid cash.');
+  assert.strictEqual(split('That is Mr. Smith. He is nice.'), 'That is Mr. Smith. | He is nice.');
+  assert.strictEqual(split('I saw e.g. a cat. Then I left.'), 'I saw e.g. a cat. | Then I left.');
+  assert.strictEqual(
+    split('Meet me at 3 p.m. tomorrow.'),
+    'Meet me at 3 p.m. tomorrow.',
+    'p.m. 后面接小写，说明句子还没完'
+  );
+  assert.strictEqual(split('Wait... what? Really!'), 'Wait... | what? | Really!', '省略号和问号感叹号照旧切开');
+  assert.strictEqual(a.run("splitEnglishSentences('').length"), 0, '空输入仍然返回空数组');
+  assert.strictEqual(split('No dot at all'), 'No dot at all', '没有句点就整段当一句');
+});
+
+test('AI 的整段回答能按小节拆成标题、英文与中文', () => {
+  const raw = [
+    '### 英文标题',
+    'A Small Habit',
+    '',
+    '### 中文标题',
+    '一个小习惯',
+    '',
+    '### 英文原文',
+    '1. I get up early every day.',
+    '2. Then I make breakfast for my family!',
+    '3. In the end, I feel ready for work.',
+    '',
+    '### 中文翻译',
+    '第 1 句中文。',
+    '第 2 句中文。',
+    '第 3 句中文。',
+    '',
+    '### 重点词块（仅供参考，不需要导入）',
+    '- make breakfast（v.+n.）：做早饭｜助记：给家人做饭',
+    '- in the end（prep. phr.）：最终｜助记：走到尽头'
+  ].join('\n');
+  const r = run(`(function(){
+    var out = parseAiOutput(${JSON.stringify(raw)});
+    var legacy = parseAiOutput('【英文】\\nA cat sat. \\n【中文】\\n一只猫坐着。');
+    /* vm 里造出来的数组跨 realm，deepStrictEqual 会误报，统一转成字符串再比 */
+    return { tEn: out.titleEn, tZh: out.titleZh, en: out.en.join(' | '), zh: out.zh.join(' | '), blocks: out.blockLines, chunks: out.chunks.map(function(c){ return c.chunk + '/' + c.pos; }).join(' , '), legacy: legacy ? legacy.en.join(' | ') : '' };
+  })()`);
+  assert.strictEqual(r.tEn, 'A Small Habit', '英文标题要去掉 ### 与编号');
+  assert.strictEqual(r.tZh, '一个小习惯', '中文标题同理');
+  assert.strictEqual(
+    r.en,
+    'I get up early every day. | Then I make breakfast for my family! | In the end, I feel ready for work.',
+    '英文去掉「1.」这类序号，仍逐句切'
+  );
+  assert.strictEqual(r.zh, '第 1 句中文。 | 第 2 句中文。 | 第 3 句中文。', '中文一行一句原样搬');
+  assert.strictEqual(r.blocks, 2, '重点词块要按行收进课程数据');
+  assert.strictEqual(r.chunks, 'make breakfast/v.+n. , in the end/prep. phr.', '词块连同词性一起解析出来');
+  assert.strictEqual(r.legacy, 'A cat sat.', '老提示词的【英文】格式也还认得');
+});
+
+test('词块卡片带上词性、多义与助记（内置文章照表显示）', () => {
+  const r = run(`(function(){
+    var lesson = LESSONS[0];
+    var html = renderChunkRows(lesson);
+    var meta = chunkMeta('wake up', lesson);
+    var multi = chunkMeta("can't help it", lesson);
+    /* 表里没有的词块（「我的文章」里自动提上来的那种）：词性靠词形推断，多义和助记不编，留空 */
+    var unknown = chunkMeta('some unknown phrase', lesson);
+    var guessN = chunkMeta('in the morning light', lesson);
+    var guessAdv = chunkMeta('constantly', lesson);
+    var guessNone = chunkMeta('zzz', lesson);
+    return { html: html, pos: meta.pos, mem: meta.mnemonic, senses: (multi.senses || []).join('、'),
+      unknownPos: unknown.pos, unknownMem: unknown.mnemonic, unknownSenses: (unknown.senses || []).length,
+      guessN: guessN.pos, guessAdv: guessAdv.pos, guessNone: guessNone.pos };
+  })()`);
+  assert.strictEqual(r.pos, 'v. phr.', '内置词块要有词性');
+  assert.ok(/助记：/.test(r.mem) || r.mem.length > 0, '内置词块要有助记');
+  assert.ok(/ci-pos/.test(r.html), '卡片上要渲染词性');
+  assert.ok(/助记：/.test(r.html), '卡片上要渲染助记');
+  assert.ok(/其他义项/.test(r.html), '「忍不住／控制不了」这类要拆成主意思 + 其他义项');
+  assert.strictEqual(r.unknownPos, 'n. phr.', '表里没有的短语按词形推断词性（some X 是名词短语）');
+  assert.strictEqual(r.unknownMem, '', '助记不凭空生成');
+  assert.strictEqual(r.unknownSenses, 0, '多义不凭空生成');
+  assert.strictEqual(r.guessN, 'prep. phr.', 'in the morning light 按首词推断成介词短语');
+  assert.strictEqual(r.guessAdv, 'adv.', '-ly 结尾推断成副词');
+  assert.strictEqual(r.guessNone, '', '判不出来就留空，卡片上给「＋ 词性」');
+});
+
+test('AI 写的文章：重点词块解析成词性/多义/助记，并补上空着的中文意思', () => {
+  const r = run(`(function(){
+    var parsed = parseAiOutput('### 重点词块\\n- make breakfast（v.+n.）：做早饭；把早餐做好｜助记：把早餐做出来\\n- in the end (prep. phr.): 最终 | 助记：走到尽头');
+    var notes = chunkNotesFromParsed(parsed.chunks);
+    var lesson = normalizeLesson({ title:'t', text:['I make breakfast.'], textZh:['我做早餐。'], chunks:[{ chunk:'make breakfast', sentence:'I make breakfast.', meaning:'' }] });
+    var filled = applyChunkNotes(lesson, notes);
+    var kept = normalizeLesson(lesson).chunkNotes;
+    return { n: parsed.chunks.length, pos: notes['make breakfast'].pos, mem: notes['make breakfast'].mnemonic, senses: notes['make breakfast'].senses.join('、'), filled: filled, meaning: lesson.chunks[0].meaning, kept: Object.keys(kept).join(','), inline: notes['in the end'].mnemonic };
+  })()`);
+  assert.strictEqual(r.n, 2, '两行重点词块都要解析出来');
+  assert.strictEqual(r.pos, 'v.+n.', '全角括号里的词性');
+  assert.strictEqual(r.senses, '做早饭、把早餐做好', '「；」隔开的多义');
+  assert.strictEqual(r.mem, '把早餐做出来');
+  assert.strictEqual(r.inline, '走到尽头', '半角括号 + 竖线的版本也认得');
+  assert.strictEqual(r.filled, 1, '空着的中文意思要用它补上');
+  assert.strictEqual(r.meaning, '做早饭');
+  assert.strictEqual(r.kept, 'make breakfast,in the end', '词块附加信息跟着文章存，读盘后还在');
+});
+
+test('AI 写的助记要过筛：把意思换个说法、只写「记住」的都不收', () => {
+  const r = run(`(function(){
+    var one = function(s){ var p = parseChunkLine(s); return p ? p.mnemonic : 'parse-failed'; };
+    return {
+      repeat: one('- give up（v. phr.）：放弃；分发｜助记：记住它表示放弃'),
+      slogan: one('- in the end（prep. phr.）：最终｜助记：多读几遍'),
+      bland: one('- light（n.）：光｜助记：记住这个搭配'),
+      sense: one('- make breakfast（v.+n.）：做早饭｜助记：做早饭要早起'),
+      ok1: one('- make breakfast（v.+n.）：做早饭｜助记：把早餐做出来'),
+      ok2: one('- take off（v. phr.）：起飞｜助记：登机前飞机离开地面的样子'),
+      none: one('- light（n.）：光')
+    };
+  })()`);
+  assert.strictEqual(r.repeat, '', '「记住它表示放弃」就是复述，不算助记');
+  assert.strictEqual(r.slogan, '', '「多读几遍」是口号，不是记忆钩子');
+  assert.strictEqual(r.bland, '', '「记住这个搭配」同理');
+  assert.strictEqual(r.sense, '', '助记里把主意思整段再说一遍也丢掉');
+  assert.strictEqual(r.ok1, '把早餐做出来', '有画面的助记要留下');
+  assert.strictEqual(r.ok2, '登机前飞机离开地面的样子');
+  assert.strictEqual(r.none, '', '没写助记不报错，卡片上就是空着');
+});
+
+test('我的文章：词性靠推断，卡片上不再有任何「问 AI / 手动补」的入口', () => {
+  const r = run(`(function(){
+    var lesson = normalizeLesson({ id:'c1', custom:true, title:'My Morning', text:['The morning light comes through the window.'], textZh:['早晨的光透过窗户照进来。'], chunks:[
+      { chunk:'the morning light', sentence:'The morning light comes through the window.', meaning:'' },
+      { chunk:'comes through', sentence:'The morning light comes through the window.', meaning:'穿过' }
+    ] });
+    state.customLessons.push(lesson);
+    var m1 = chunkMeta('the morning light', lesson);
+    var html = renderChunkRows(lesson);
+    return { pos: m1.pos, inferred: m1.inferred, mem: m1.mnemonic,
+      manual: (html.match(/data-note=/g) || []).length + (html.match(/data-ask=/g) || []).length,
+      copyPrompt: html.indexOf('提示词') > -1 };
+  })()`);
+  assert.strictEqual(r.pos, 'n. phr.', '内置表里没有的词块按词形推断词性');
+  assert.strictEqual(r.inferred, true, '推断出来的要标出来（虚线圈）');
+  assert.strictEqual(r.mem, '', '助记不凭空编');
+  assert.strictEqual(r.manual, 0, '卡片上不再有逐条的「改词性/加助记/加其他义项/问 AI」');
+  assert.strictEqual(r.copyPrompt, false, '卡片上也不再出现复制提示词的入口');
+  const src = fs.readFileSync(APP, 'utf8');
+  assert.strictEqual(src.indexOf('btnChunkNotesAi'), -1, '整篇补全那颗按钮已去掉');
+  assert.strictEqual(src.indexOf('buildChunkNotesPrompt'), -1, '整篇补全的提示词已去掉');
+  assert.strictEqual(src.indexOf('data-ask-chunk'), -1, '词块本里的「问 AI」已去掉');
+  assert.strictEqual(src.indexOf('buildWordPrompt'), -1, '只问一个词的提示词已去掉');
+});
+
+test('自动分段：行内小节、开场白、光秃秃的小节名都分得开', () => {
+  const r = run(`(function(){
+    var a = parseAiOutput('好的，下面是文章。\\n### 英文标题：A Quiet Morning\\n### 中文标题：安静的早晨\\n### 英文原文：The light comes in. I get up early.\\n### 中文翻译：光透进来。我早起。\\n### 重点词块\\n- morning light（n. phr.）：晨光｜助记：morning 早晨');
+    var b = parseAiOutput('英文标题：My Weekend\\n中文标题：我的周末\\n英文原文：\\nI go to the park.\\n中文翻译：\\n我去公园。');
+    return {
+      a: [a.titleEn, a.titleZh, a.en.length, a.zh.length, a.chunks.length, a.ignored].join('|'),
+      b: [b.titleEn, b.titleZh, b.en.length, b.zh.length].join('|')
+    };
+  })()`);
+  assert.strictEqual(
+    r.a,
+    'A Quiet Morning|安静的早晨|2|1|1|1',
+    '「### 英文标题：内容」同行写法要认出标题，开场白要跳过'
+  );
+  assert.strictEqual(r.b, 'My Weekend|我的周末|1|1', '没有 ### 的「英文原文：」也要当成小节头');
+});
+
+test('AI 的重点词块会和自动提取的词块对齐：碎片被替换、缺的补进来', () => {
+  const r = run(`(function(){
+    var lesson = normalizeLesson({ id:'c2', custom:true, title:'t', text:['The morning light comes through the window.','In the end, I decided to get up.'], textZh:['早晨的光透过窗户照进来。','最后我决定起床。'], chunks:[] });
+    lesson.chunks = extractChunks(lesson.text, 18);
+    var parsed = parseAiOutput('### 重点词块\\n- morning light（n. phr.）：晨光\\n- in the end（prep. phr.）：最终');
+    var filled = applyChunkNotes(lesson, chunkNotesFromParsed(parsed.chunks));
+    var names = lesson.chunks.map(function(c){ return c.chunk; }).join(',');
+    var note = lesson.chunkNotes['morning light'] || {};
+    var endNote = lesson.chunkNotes['in the end'] || {};
+    return { dirty: lesson.chunks.some(function(c){ return /[,.;]/.test(c.chunk); }), crossed: lesson.chunks.some(function(c){ return chunkLooseKey(c.chunk) === 'decision get'; }), names: names, filled: filled, pos: note.pos, endPos: endNote.pos, meaning: (lesson.chunks.filter(function(c){ return c.chunk === 'morning light'; })[0] || {}).meaning || '' };
+  })()`);
+  assert.strictEqual(r.dirty, false, '提取出来的词块不该带标点碎片');
+  assert.ok(r.names.indexOf('morning light') > -1, 'AI 说的词块要补进这篇：' + r.names);
+  assert.ok(r.names.indexOf('in the end') > -1, '不在提取结果里的 AI 词块也要补进来（能找到原句才加）：' + r.names);
+  assert.strictEqual(r.pos, 'n. phr.', '对齐后词性要挂上');
+  assert.strictEqual(r.endPos, 'prep. phr.');
+  assert.strictEqual(r.meaning, '晨光', '空着的中文意思用第一个义项补');
+  assert.strictEqual(r.crossed, false, '跨意群的碎片（decision to get）要被清掉：' + r.names);
+});
+
+test('数字短语：twenty minutes 这类直接算出中文意思和词性，不用去问 AI', () => {
+  const r = run(`(function(){
+    var a = normalizeLesson({ id:'c3', custom:true, title:'t', text:['Getting ready for work takes me about twenty minutes.','I stayed there for three days.'], textZh:['准备上班大概花我二十分钟。','我在那儿待了三天。'], chunks:[] });
+    a.chunks = extractChunks(a.text, 18);
+    var pick = function(n){ return a.chunks.filter(function(c){ return c.chunk === n; })[0] || {}; };
+    return { twenty: numPhraseGloss('twenty minutes'), three: numPhraseGloss('three days'), pos: inferPos('twenty minutes'), word: inferPos('twenty'), none: numPhraseGloss('morning light'),
+      names: a.chunks.map(function(c){ return c.chunk; }).join(','), got: pick('twenty minutes').meaning || '' };
+  })()`);
+  assert.strictEqual(r.twenty, '二十分钟');
+  assert.strictEqual(r.three, '三天');
+  assert.strictEqual(r.pos, 'num.+n.');
+  assert.strictEqual(r.word, 'num.', '单个数字词也是 num.');
+  assert.strictEqual(r.none, '', '不是数字短语就不猜');
+  assert.strictEqual(r.got, '二十分钟', '提取词块时就自动填上，卡片不会空着：' + r.names);
+});
+
+test('不粘 AI 回答时，词性、多义也从本地表里自动来', () => {
+  const r = run(`(function(){
+    var light = chunkMeta('light', null);
+    var decision = chunkMeta('decision', null);
+    var unknown = chunkMeta('zzz', null);
+    return { lightPos: light.pos, lightSenses: light.senses.join('、'), decisionPos: decision.pos, unknownPos: unknown.pos, unknownSenses: unknown.senses.length };
+  })()`);
+  assert.ok(/n\./.test(r.lightPos) && /v\./.test(r.lightPos), 'light 是名词也是动词，查表要给出多个：' + r.lightPos);
+  assert.ok(r.lightSenses.indexOf('轻的') > -1, '一词多义要自动带上：' + r.lightSenses);
+  assert.strictEqual(r.decisionPos, 'n.', '词性按表/后缀自动给');
+  assert.strictEqual(r.unknownPos, '', '判不出来就留空，不瞎标');
+  assert.strictEqual(r.unknownSenses, 0);
+});
+
+test('带冠词的长短语整串查不到意思时，退回子串的意思', () => {
+  const r = run(`(function(){
+    var chunks = extractChunks(['The alarm rings at six in the morning.'], 18);
+    var one = chunks.filter(function(c){ return c.chunk === 'alarm rings'; })[0] || {};
+    return { meaning: one.meaning || '', sub: subChunkGloss('the alarm rings'), none: subChunkGloss('zzz qqq') };
+  })()`);
+  assert.strictEqual(r.sub, '闹钟响', 'the alarm rings → 退回 alarm rings 的意思');
+  assert.strictEqual(r.meaning, '闹钟响', '自动提取出来的词块直接带上这个意思');
+  assert.strictEqual(r.none, '', '查不到就空着，不瞎给');
+});
+
+test('子串释义只许丢开头的实词，末尾实词不许丢', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dict.json'), 'utf8')).words;
+  const a = loadApp();
+  a.run('OFFLINE_DICT = ' + JSON.stringify(dict) + '; "ok"');
+  const sub = (s) => a.run('subChunkGloss(' + JSON.stringify(s) + ')');
+  assert.strictEqual(sub('the alarm rings'), '闹钟响', '带冠词的长短语照样能退回子串');
+  assert.strictEqual(sub('say good morning'), '早上好', '丢掉开头的实词还行：say good morning → good morning');
+  assert.strictEqual(sub('like to get'), '', 'like to 只剩一个实词，不算（以前判成「差点儿就要」）');
+  assert.strictEqual(sub('run for fifteen'), '', 'run for 只剩 run，不算（以前判成「竞选」）');
+  assert.strictEqual(sub('to-do list'), '', 'to do 只剩 do，不算（以前判成「要做某事」）');
+});
+
+test('词形表：不规则变形能查回原形再拿到意思', () => {
+  const a = loadApp();
+  a.run(`OFFLINE_DICT = { go: 'v. 去；走', good: 'adj. 好的' }; LEMMA = { went: 'go', better: 'good' }; 'ok'`);
+  assert.strictEqual(a.run(`glossOfWord('went')`), '去', 'went 先查回 go 再取第一个义项');
+  assert.strictEqual(a.run(`glossOfWord('better')`), '好的');
+  assert.strictEqual(a.run(`lemmaOf('Went')`), 'go', '大小写不敏感');
+  assert.strictEqual(a.run(`glossOfWord('zzz')`), '', '查不到就空着，不硬编');
+});
+
+test('接上离线词典后，短语词块能靠每个词的意思拼出助记', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dict.json'), 'utf8')).words;
+  const lemma = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'lemma.json'), 'utf8')).words;
+  const src =
+    "(function(){\n  var before = buildPhraseMnemonic('light bag');\n  var plainHood = glossOfWord('wardrobe');\n  OFFLINE_DICT = __DICT__;\n  LEMMA = __LEMMA__;\n  var after = buildPhraseMnemonic('light bag');\n  return { before: before, after: after, plainHood: plainHood, hood: glossOfWord('wardrobe'), went: glossOfWord('went') };\n})()"
+      .replace('__DICT__', JSON.stringify(dict))
+      .replace('__LEMMA__', JSON.stringify(lemma));
+  const r = run(src);
+  assert.strictEqual(r.before, '', '没有词典时两个词都认不出，就空着');
+  assert.ok(r.after.indexOf('光') > -1, '有词典后能拼出 light（光）；现在：' + r.after);
+  assert.strictEqual(r.plainHood, '', '没词典时 wardrobe 没有释义');
+  assert.strictEqual(r.hood, '衣橱');
+  assert.ok(r.went !== '', 'went 要能查回 go 拿到意思：' + r.went);
+});
+test('离线词典的 | 分块：别的词性进「其他义项」，同义词不重复列', () => {
+  const a = loadApp();
+  a.run("OFFLINE_DICT = { light: 'n. 光, 光亮 | adj. 轻的, 少量', hood: 'n. 罩；风帽' }; 'ok'");
+  assert.strictEqual(a.run("dictGloss('light')"), '光', '只取第一块第一项');
+  assert.strictEqual(a.run("dictSenses('light')").join(' / '), 'adj. 轻的', '换词性的那一块才算其他义项');
+  assert.strictEqual(a.run("dictSenses('hood')").join(' / '), '风帽', '只有一块时靠分号拆');
+  assert.strictEqual(a.run("dictSenses('zzz')").length, 0);
+});
+
+test('data/dict.json 装的是能直接用的中文释义', () => {
+  const p = path.join(ROOT, 'data', 'dict.json');
+  assert.ok(fs.existsSync(p), '要随仓库提交 data/dict.json');
+  /* 2 万单词约 950KB，加上 3.6 万条常见搭配后约 2.3MB；再大就说明收进了不该收的条目 */
+  assert.ok(
+    fs.statSync(p).size < 4 * 1024 * 1024,
+    '词典别超过 4MB（现在 ' + Math.round(fs.statSync(p).size / 1024) + 'KB）'
+  );
+  const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const lp = path.join(ROOT, 'data', 'lemma.json');
+  const a = loadApp();
+  a.run(
+    'OFFLINE_DICT = ' +
+      JSON.stringify(j.words) +
+      '; LEMMA = ' +
+      JSON.stringify(JSON.parse(fs.readFileSync(lp, 'utf8')).words) +
+      '; "ok"'
+  );
+  assert.strictEqual(a.run("dictGloss('morning')"), '早晨');
+  assert.ok(
+    a.run("dictSenses('light')").some((s) => s.indexOf('adj. 轻的') === 0),
+    'light 的形容词义项要进其他义项'
+  );
+  assert.strictEqual(a.run("glossOfWord('light')"), '光');
+  assert.strictEqual(a.run("lookupGloss('wardrobe')"), '衣橱');
+});
+
+test('短语也进词典：提取出来的 2–3 词搭配直接带中文', () => {
+  const j = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dict.json'), 'utf8'));
+  const a = loadApp();
+  a.run('OFFLINE_DICT = ' + JSON.stringify(j.words) + '; "ok"');
+  assert.strictEqual(a.run("lookupGloss('coffee shop')"), '咖啡店', '整串短语要能直接查到');
+  assert.strictEqual(a.run("dictGloss('software engineer')"), '软件工程师');
+  assert.strictEqual(a.run("dictGloss('In The End')"), '最后', '大小写不敏感');
+  /* 端到端：一篇文章里自动提取出的搭配本身就带上中文，不用手填 */
+  const got = a.run(
+    "(function(){ var s = splitEnglishSentences('We met at a coffee shop near the station.'); " +
+      "return extractChunks(s, 8).filter(function(c){ return c.meaning; }).map(function(c){ return c.chunk + '=' + c.meaning; }); })()"
+  );
+  /* 提取可能给出 coffee shop 也可能给出 coffee shop near，两者都该拿到「咖啡店」 */
+  assert.ok(
+    got.some(function (s) {
+      return s.indexOf('coffee shop') === 0 && /咖啡店$/.test(s);
+    }),
+    '提取出的 coffee shop 要有中文：' + got.join(' | ')
+  );
+});
+
+test('词典构建：短语只收每个词都认得的，且必须有中文', () => {
+  const { buildDict } = require(path.join(ROOT, 'tools', 'build-dict.js'));
+  const rows = [
+    ['word', 'translation', 'tag', 'bnc', 'frq'],
+    ['coffee', 'n. 咖啡', '', '1000', '1000'],
+    ['shop', 'n. 商店', '', '1200', '1200'],
+    ['coffee shop', '咖啡店', '', '1500', '1500'],
+    ['coffee zzz', '咖啡某物', '', '1600', '1600'],
+    ['coffee shop bar', '[网络] 咖啡吧', '', '1700', '1700'],
+    ['shop coffee', 'shop coffee', '', '1800', '1800']
+  ];
+  const built = buildDict(rows, { limit: 2, phrases: Infinity });
+  assert.strictEqual(built.words['coffee shop'], '咖啡店', '两个词都认得就收进来');
+  assert.ok(!('coffee zzz' in built.words), '有一个词不在词表里，整条不收');
+  assert.ok(!('coffee shop bar' in built.words), '只有 [领域] 标注的条目跳过');
+  assert.ok(!('shop coffee' in built.words), '没有中文的条目跳过');
+  assert.strictEqual(built.phraseCount, 1);
+});
+
+test('data/lemma.json 是一份精简可用的词形表', () => {
+  const p = path.join(ROOT, 'data', 'lemma.json');
+  assert.ok(fs.existsSync(p), '要随仓库提交 data/lemma.json');
+  const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+  assert.strictEqual(j.words.went, 'go');
+  assert.strictEqual(j.words.children, 'child');
+  assert.strictEqual(j.words.mice, 'mouse');
+  assert.ok(fs.statSync(p).size < 200 * 1024, '表要精简（现在 ' + fs.statSync(p).size + ' 字节）');
+});
+
+test('离线词典：放上 data/dict.json 就补中文意思和其他义项，没有也不影响', () => {
+  const a = loadApp();
+  assert.strictEqual(a.run(`lookupGloss('hood')`), '', '没有词典文件时不该凭空造意思');
+  assert.strictEqual(a.run(`dictGloss('hood')`), '');
+  a.run(`OFFLINE_DICT = { hood: 'n. 罩；风帽；面罩', wander: 'v. 漫步；走神', organizing: 'v. 组织' }; 'ok'`);
+  assert.strictEqual(a.run(`lookupGloss('hood')`), '罩', '单词语块要能查到词典里的中文');
+  assert.strictEqual(a.run(`glossOfWord('Wander')`), '漫步', '大小写不敏感');
+  assert.strictEqual(a.run(`dictSenses('hood').join(',')`), '风帽,面罩', '其余义项去掉词性后分开');
+  assert.strictEqual(a.run(`chunkMeta('hood', null).senses.join(',')`), '风帽,面罩', '卡片上的「其他义项」用词典兜底');
+  assert.ok(/轻/.test(a.run(`chunkMeta('light', null).senses.join(',')`)), '内置表里的词不被词典覆盖');
+  assert.strictEqual(a.run(`chunkMeta('organizing', null).pos`), 'v.ing', '词性还是按词形推断，不靠词典');
+});
+
+test('词块本与复习卡片也用上词典的其他义项，主意思重复的不列', () => {
+  const a = loadApp();
+  a.run(`OFFLINE_DICT = { hood: 'n. 罩；风帽；面罩', light: 'n. 光, 光亮 | adj. 轻的 | v. 点燃' }; 'ok'`);
+  assert.strictEqual(
+    a.run(`metaSenses(chunkMeta('hood', null), '罩').join(',')`),
+    '风帽,面罩',
+    '词块本里没填多义的词，其他义项从词典来'
+  );
+  assert.strictEqual(
+    a.run(`metaSenses(chunkMeta('light', null), '轻的').join(',')`),
+    '点燃',
+    '主意思就是「轻的」，别再列一遍'
+  );
+  assert.strictEqual(a.run(`metaSenses(chunkMeta('zzz', null), '').length`), 0, '查不到就什么都不显示');
+  /* 渲染层：三处都要真用到它（词块本卡片 / 复习揭晓 / 搜索） */
+  const src = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+  assert.ok(/<p class="senses"><span class="lbl">其他义项<\/span>/.test(src), '词块本卡片要显示其他义项');
+  assert.ok(/rev-extra">其他义项/.test(src), '复习揭晓后要带其他义项');
+  assert.ok(/metaSenses\(chunkMeta\(c\.chunk\), c\.meaning\)\.join\(' '\)/.test(src), '搜「轻的」要能找到 light');
+  assert.ok(/const meaning = c\.meaning \|\| dictGloss\(c\.chunk\)/.test(src), '老词块没填意思时用词典首义兜底');
+});
+
+test('构词助记认词根，短语助记先认整条、拆词只当退路', () => {
+  const r = run(`(function(){
+    return {
+      inspect: buildMorphMnemonic('inspect', ''),
+      invisible: buildMorphMnemonic('invisible', ''),
+      remote: buildMorphMnemonic('remote', ''),
+      unhappy: buildMorphMnemonic('unhappiness', ''),
+      phrase: buildPhraseMnemonic('light taste'),
+      phraseNone: buildPhraseMnemonic('zzz qqq'),
+      prefixes: Object.keys(PREFIX_META).length,
+      roots: Object.keys(ROOT_META).length,
+      viaMeta: chunkMeta('invisible', null).mnemonic || ''
+    };
+  })()`);
+  assert.ok(/spect（看）/.test(r.inspect), 'inspect 要能拆出词根 spect（看）：' + r.inspect);
+  assert.ok(/vis（看）/.test(r.invisible), 'invisible = in + vis + ible：' + r.invisible);
+  assert.strictEqual(r.remote, '', 'remote 不该被误拆成 re + mote');
+  assert.ok(/un-/.test(r.unhappy) && /-ness/.test(r.unhappy), '前后缀还是要照旧拆：' + r.unhappy);
+  assert.ok(/light（光）/.test(r.phrase), '两个词都查得到意思时拼成助记：' + r.phrase);
+  assert.strictEqual(r.phraseNone, '', '一个词都查不到就不硬拼');
+  assert.ok(r.prefixes >= 50, '前缀表要扩到 50 条以上：' + r.prefixes);
+  assert.ok(r.roots >= 40, '词根表至少 40 条：' + r.roots);
+  assert.ok(/vis（看）/.test(r.viaMeta), 'chunkMeta 取到的助记走的是同一套构词逻辑：' + r.viaMeta);
+});
+
+test('构词助记不硬凑：词干既没意思也认不出词根就留空', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dict.json'), 'utf8')).words;
+  const lemma = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'lemma.json'), 'utf8')).words;
+  const a = loadApp();
+  a.run('OFFLINE_DICT = ' + JSON.stringify(dict) + '; LEMMA = ' + JSON.stringify(lemma) + '; "ok"');
+  const m = (w) => a.run('buildMorphMnemonic(' + JSON.stringify(w) + ', "")');
+  assert.strictEqual(m('intentional'), '', 'in- + -al 拆完词干没意思，不如不写');
+  assert.strictEqual(m('anticipation'), '', 'anti 是「反对」不是「在前」，不能乱认前缀');
+  assert.strictEqual(m('reinforced'), '', '把屈折 -ed 当构词后缀会教错');
+  const conv = m('conversation');
+  assert.ok(conv.indexOf('co-') === -1, 'co 不是前缀：' + conv);
+  assert.ok(/vers（转）/.test(conv), '认得出词根就照常讲：' + conv);
+  assert.ok(/steady（稳定）/.test(m('steadily')), 'steadily 要还原成 steady 再讲：' + m('steadily'));
+  assert.ok(/hope（希望）/.test(m('hopeless')), '词干短但有后缀的照样讲：' + m('hopeless'));
+  assert.ok(/poss（能）/.test(m('impossible')), 'impossible = im + poss + ible');
+  assert.strictEqual(m('remote'), '', 'remote 不该被误解成 re + mote');
+});
+
+test('短语助记先认整条意思：give up 是「放弃」，不再拆成「弹性 + 向上的」', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dict.json'), 'utf8')).words;
+  const lemma = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'lemma.json'), 'utf8')).words;
+  const a = loadApp();
+  a.run('OFFLINE_DICT = ' + JSON.stringify(dict) + '; LEMMA = ' + JSON.stringify(lemma) + '; "ok"');
+  const m = (s) => a.run('buildPhraseMnemonic(' + JSON.stringify(s) + ')');
+  assert.strictEqual(m('give up'), '放弃', '整条有义就别拆词');
+  assert.strictEqual(m('in the end'), '最终');
+  assert.strictEqual(m('coffee shop'), '咖啡店', '词典里的短语条目直接用');
+  assert.strictEqual(m('take off'), '起飞');
+  assert.strictEqual(m('twenty minutes'), '二十分钟', '数字短语也算整条义');
+  assert.strictEqual(m('care about'), '在意');
+  /* 拆词只留给整条查不到的时候，而且虚词不能参与 */
+  assert.ok(/light（光）/.test(m('light taste')), '整条没有时才拆词：' + m('light taste'));
+  const withThe = m('light the bag');
+  assert.ok(withThe.indexOf('the（') === -1, 'the/in/up 这些虚词不许摆进助记：' + withThe);
+  /* 屈折形按原形取义（felt 的词典首义是「毛毯」） */
+  assert.ok(m('felt heavy').indexOf('毛毯') === -1, 'felt 要按 feel 取义：' + m('felt heavy'));
+});
+
+test('短语里的三单和复数按原形取义：feels 是「感觉」不是「毛毯」', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dict.json'), 'utf8')).words;
+  const lemma = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'lemma.json'), 'utf8')).words;
+  const a = loadApp();
+  a.run('OFFLINE_DICT = ' + JSON.stringify(dict) + '; LEMMA = ' + JSON.stringify(lemma) + '; "ok"');
+  /* 词形表把 feels 收成了 felt（毛毯），所以规则必须先于词形表 */
+  assert.strictEqual(a.run('phraseBaseOf("feels")'), 'feel');
+  assert.strictEqual(a.run('phraseBaseOf("starts")'), 'start');
+  assert.strictEqual(a.run('phraseBaseOf("habits")'), 'habit');
+  assert.strictEqual(a.run('phraseBaseOf("reduces")'), 'reduce');
+  const m = a.run('buildPhraseMnemonic("feels calm")');
+  assert.ok(m.indexOf('感觉') > -1 && m.indexOf('毛毯') === -1, 'feels 要按 feel 取义：' + m);
+  assert.ok(a.run('buildMorphMnemonic("overnight","")').indexOf('越过') > -1, 'over- 不只有「过度」');
+});
+
+test('词块提取丢掉切碎的半句，只留下值得记的语块', () => {
+  const r = run(`(function(){
+    var text = ['I get dressed and pack my bag before work.','Getting ready takes me twenty minutes.','Sarah walks to the coffee shop and knows it is early.'];
+    var cs = extractChunks(text, 18);
+    var names = cs.map(function(c){ return c.chunk; });
+    function has(w){ return names.indexOf(w) > -1; }
+    return {
+      names: names.join(','),
+      count: cs.length,
+      linkerPiece: names.some(function(n){ return n.split(' ').indexOf('and') > -1; }),
+      subjectVerb: has('Sarah walks'),
+      numberPiece: has('takes me twenty'),
+      worth: [chunkWorth('Sarah walks','',1,false), chunkWorth('dressed and pack','',1,false), chunkWorth('takes me twenty','',1,false), chunkWorth('make breakfast','做早餐',1,false), chunkWorth('morning light','',1,false)].map(function(b){ return b ? 'y' : 'n'; }).join(''),
+      clock: numPhraseGloss("seven o'clock"),
+      meaningFirst: !!(cs[0] && cs[0].meaning)
+    };
+  })()`);
+  assert.ok(r.count <= 12, '筛完不该还是 18 条：' + r.names);
+  assert.strictEqual(r.linkerPiece, false, '「dressed and pack」这类并列碎片要丢掉：' + r.names);
+  assert.strictEqual(r.subjectVerb, false, '「Sarah walks」这种主谓被切成两词的碎片要丢掉：' + r.names);
+  assert.strictEqual(r.numberPiece, false, '「takes me twenty」这种缺单位词的数字碎片要丢掉：' + r.names);
+  assert.strictEqual(r.worth, 'nnnyy', '碎片丢、真搭配留（含查得到中文的）');
+  assert.strictEqual(r.clock, '七点', "seven o'clock 也要算出中文");
+  assert.strictEqual(r.meaningFirst, true, '查得到中文的排在最前面');
+});
+
+test('问 AI 的站点里有千问，下拉与配置同步', () => {
+  const names = run(`(function(){ return AI_SITES.map(function(s){ return s.name + ' ' + s.url; }).join('|'); })()`);
+  assert.ok(/千问 https:\/\/www\.qianwen\.com\//.test(names), 'AI_SITES 里要有千问', names);
+  const html = fs.readFileSync(HTML, 'utf8');
+  assert.ok(/<option value="https:\/\/www\.qianwen\.com\/">千问<\/option>/.test(html), '统计页下拉也要有这一项');
+  assert.ok(
+    /aSentCount/.test(html) && /id="aAiRaw"/.test(html) && /id="btnParseAi"/.test(html),
+    '弹窗要有句数输入和「自动分段」入口'
+  );
 });
 
 test('提示词与复制按钮都走 app.js，HTML 里没有内联事件', () => {
@@ -493,8 +1055,44 @@ test('提示词与复制按钮都走 app.js，HTML 里没有内联事件', () =>
   assert.ok(/data-page="mistakes"/.test(html), '要有 tab 入口');
   assert.ok(/id="mistakeBody"/.test(html) && /id="mistakeChips"/.test(html));
   assert.ok(/id="aPrompt"/.test(html) && /id="btnCopyPrompt"/.test(html), '文章弹窗里要有提示词框和复制按钮');
+  assert.ok(/bind\('#btnParseAi', 'click', fillFromAiOutput\)/.test(src), '「自动分段」按钮要接到 fillFromAiOutput');
   assert.ok(/bindMistakeEvents\(\);/.test(src), '错题本事件要在 init 里绑定');
   assert.ok(/#mistakeChips/.test(src) && /#btnCopyPrompt/.test(src));
+});
+
+console.log('初始化容错');
+test('init 里不再裸取元素：缺 id 只提示、不中断整页', () => {
+  /* 以前是 $('#x').onclick = ...，改页面时漏掉或改名一个 id，init() 就在那一行抛
+     TypeError，后面的接线、renderAll()、定时器全都不执行，表现成「能打开但按钮全哑」。
+     现在统一走 bind()：元素不在只记一条，启动后给一句可关闭的提示。 */
+  const initBody = src.slice(src.indexOf('function init(){'));
+  assert.ok(initBody.length > 10000, 'init() 要从源码里切出来');
+  assert.ok(!/\$\('#[\w-]+'\)\.onclick\s*=/.test(initBody), 'init 里不该再有裸的 onclick 赋值');
+  assert.ok(!/\$\('#[\w-]+'\)\.addEventListener\(/.test(initBody), 'init 里不该再对 $() 的返回值直接 addEventListener');
+  assert.ok(/function bind\(target, evt, fn\)\{/.test(src), '要有 bind() 帮助函数');
+  assert.ok(
+    /if \(!el\)\{ if \(typeof target === 'string'\) bindMisses\.push\(target\); return null; \}/.test(src),
+    'bind 缺元素时只记账、不抛错'
+  );
+});
+
+test('启动走带兜底的 boot()，失败要在界面上说得清', () => {
+  assert.ok(/function boot\(\)\{/.test(src), '要有 boot() 包一层');
+  assert.ok(
+    /document\.addEventListener\('DOMContentLoaded', boot\)/.test(src) && /else boot\(\);/.test(src),
+    'DOMContentLoaded 与同步两条路径都要走 boot'
+  );
+  assert.ok(/function reportUiIssue\(title, detail\)\{/.test(src), '要有可见的错误提示');
+  assert.ok(/reportUiIssue\('界面初始化失败'/.test(src), 'init 抛错时要提示');
+  assert.ok(/catch\(err\)\{\s*\n\s*console\.error\('\[init\]/.test(src), '失败路径要留一条 console.error 方便排查');
+});
+
+test('init 在桩 DOM 上能从头跑到尾（兜接线拼写错误）', () => {
+  /* 桩 DOM 的 querySelector 永远返回元素，所以不会走到 bind() 的缺元素分支；
+     这里要的是「四十多处事件名、选择器拼错一个就当场炸」这种保护。 */
+  const fresh = loadApp();
+  fresh.run('boot()');
+  assert.ok(true, 'init() 完整跑完');
 });
 
 console.log('填空逐题判');
@@ -516,7 +1114,10 @@ test('填空题每题都有自己的「看这题答案」，默认不展开答�
   assert.strictEqual(r.btns, r.n, '每道题都要有自己的判定按钮');
   assert.strictEqual(r.opened, r.n, '默认每题的答案框都收着，不该一进来就摊开');
   assert.ok(r.label, '按钮文案要说清是「看这题答案」');
-  assert(/data-cloze-check=/.test(src) && /function judgeCloze\(i\)/.test(src), '判定要抽成一个函数，逐题与全部检查共用同一套规则');
+  assert(
+    /data-cloze-check=/.test(src) && /function judgeCloze\(i\)/.test(src),
+    '判定要抽成一个函数，逐题与全部检查共用同一套规则'
+  );
   assert(/全部检查/.test(src), '整卷判定的按钮要叫「全部检查」');
   assert(!/results\[i\] = ok;/.test(src), '全部检查里那句「空着也判错」的老逻辑要消失');
 });
@@ -851,9 +1452,40 @@ test('免安装 zip 由脚本生成，不再手工打包', () => {
   assert(/build-portable\.js/.test(pkg.scripts.dist), 'npm run dist 应顺带产出免安装 zip');
 });
 
+test('网页版预览走 http：离线词典才拿得到，Service Worker 不让它挡缓存', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.strictEqual(pkg.scripts.preview, 'node tools/preview.js', 'package.json 里要注册 preview');
+  const src = fs.readFileSync(path.join(ROOT, 'tools', 'preview.js'), 'utf8');
+  assert.ok(/pathname === '\/sw\.js'/.test(src), '预览时要把 sw.js 换成空文件，否则旧缓存挡住改动');
+  assert.ok(/EADDRINUSE/.test(src), '端口被占要顺延，不能直接退出');
+  assert.ok(/startsWith\(ROOT \+ path\.sep\)/.test(src), '只服务工作区里的文件，拼出去的要挡掉');
+  assert.ok(/data\/dict\.json/.test(src), '脚本注释里要说清它解决了什么：file:// 下 fetch 读不到词典');
+});
+
+test('双击打开时提示「离线词典要用桌面版」，点掉之后不再烦', () => {
+  const tip = makeEl();
+  tip.hidden = true;
+  const btn = makeEl();
+  const fileApp = loadApp({ protocol: 'file:', els: { fileTip: tip, btnFileTipClose: btn } });
+  assert.strictEqual(fileApp.run('offlineDataBlocked()'), true, 'file:// 要认出来');
+  fileApp.run('loadOfflineData()');
+  assert.strictEqual(tip.hidden, false, 'file:// 下要显示出提示条');
+  btn.onclick();
+  assert.strictEqual(tip.hidden, true, '点「知道了」要收起');
+  assert.strictEqual(fileApp.store.get('ecChunksFileTipOff'), '1', '关过要记住，别每次开都弹');
+  tip.hidden = true;
+  fileApp.run('showOfflineTip()');
+  assert.strictEqual(tip.hidden, true, '记住之后就不再显示');
+  const httpApp = loadApp();
+  assert.strictEqual(httpApp.run('offlineDataBlocked()'), false, 'http 下词典能加载，不该提示');
+  const html = fs.readFileSync(HTML, 'utf8');
+  assert(/id="fileTip"[^>]*hidden/.test(html), '提示条默认要藏着，靠 script 打开');
+  assert(/id="btnFileTipClose"/.test(html), '要有收起按钮');
+});
 
 test('手工重打 app.asar 的文件清单与 build.files 对齐', () => {
   const script = fs.readFileSync(path.join(ROOT, 'tools', 'repack-unpacked.js'), 'utf8');
+  const ONLY_JSON_RE = /ONLY_JSON = new Set\(\['data'\]\)/;
   const m = script.match(/const ITEMS = \[([\s\S]*?)\];/);
   assert.ok(m, 'repack-unpacked.js 里要有 ITEMS 清单');
   const items = (m[1].match(/'[^']+'/g) || []).map((s) => s.slice(1, -1));
@@ -862,6 +1494,15 @@ test('手工重打 app.asar 的文件清单与 build.files 对齐', () => {
   for (const f of files) {
     if (f === 'electron/**/*') {
       assert.ok(items.includes('electron'), 'electron/ 必须一起打进 asar');
+      continue;
+    }
+    if (f.startsWith('data/')) {
+      // data/ 下的离线词典与词形表要带上，但只能带 *.json：同目录还放着 ecdict.csv（65MB）这类
+      // 原始数据，整个目录搬进去 app.asar 会从 1MB 涨到 69MB，安装包白胖 70MB
+      const dir = f.split('/')[0];
+      assert.ok(items.includes(dir), 'ITEMS 里缺 ' + dir + '，装完就没有离线释义了');
+      assert.ok(fs.existsSync(path.join(ROOT, dir)), dir + '/ 目录要存在');
+      assert.ok(ONLY_JSON_RE.test(script), 'repack 的 data/ 要按 *.json 过滤');
       continue;
     }
     if (f.includes('*')) {

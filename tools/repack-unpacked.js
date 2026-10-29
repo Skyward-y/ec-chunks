@@ -19,6 +19,9 @@ const BUILD = path.join(ROOT, 'dist', 'app-build');
 const TARGET = path.join(RES_DIR, 'app.asar');
 
 // 与 package.json 的 build.files 保持一致
+// data/ 里只带 *.json：同目录还躺着 ecdict.csv（65MB）这类原始数据（已 gitignore），
+// 整个目录搬进去会让 app.asar 从 1MB 涨到 69MB，安装包白胖 70MB。
+const ONLY_JSON = new Set(['data']);
 const ITEMS = [
   'electron',
   'index.html',
@@ -29,6 +32,7 @@ const ITEMS = [
   'manifest.webmanifest',
   'sw.js',
   'icon.svg',
+  'data',
   'package.json'
 ];
 
@@ -45,6 +49,13 @@ function fail(msg) {
   for (const item of ITEMS) {
     const src = path.join(ROOT, item);
     if (!fs.existsSync(src)) fail('缺少 ' + src);
+    if (ONLY_JSON.has(item)) {
+      fs.mkdirSync(path.join(BUILD, item), { recursive: true });
+      const names = fs.readdirSync(src).filter((n) => n.toLowerCase().endsWith('.json'));
+      if (!names.length) fail(src + ' 里没有 json，装完就没有离线词典了');
+      for (const n of names) fs.cpSync(path.join(src, n), path.join(BUILD, item, n));
+      continue;
+    }
     fs.cpSync(src, path.join(BUILD, item), { recursive: true });
   }
 

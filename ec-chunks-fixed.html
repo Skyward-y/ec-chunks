@@ -35,6 +35,10 @@ input,textarea,select{font-family:inherit;color:var(--ink);}
 .streak strong{color:var(--brand-2);font-size:16px;}
 .tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--line);padding:5px;border-radius:14px;box-shadow:var(--shadow);overflow-x:auto;margin-bottom:18px;}
 .tabs::-webkit-scrollbar{display:none;}
+.offline-tip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.65;}
+.offline-tip[hidden]{display:none;}
+.offline-tip code{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12px;color:var(--brand-2);}
+.offline-tip .btn{margin-left:auto;}
 .tab{flex:1 0 auto;border:none;background:transparent;padding:9px 16px;border-radius:10px;font-size:14px;font-weight:600;color:var(--muted);transition:.18s;white-space:nowrap;}
 .tab:hover{color:var(--brand-2);background:var(--soft);}
 .tab.active{background:var(--brand);color:#fff;box-shadow:0 4px 12px rgba(47,158,110,.28);}
@@ -118,6 +122,7 @@ input,textarea,select{font-family:inherit;color:var(--ink);}
 .review-answer .c{font-size:22px;font-weight:800;color:var(--brand-2);margin:0 0 4px;}
 .review-answer .m{font-size:15px;color:var(--ink);opacity:.8;margin:0 0 12px;}
 .review-answer .mine{font-size:13.5px;color:var(--muted);font-style:italic;margin:0 0 4px;}
+.review-answer .rev-extra{font-size:13px;color:var(--brand-2);margin:0 0 10px;}
 .grade-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:20px;}
 .grade-btns .btn{padding:12px 6px;font-size:14px;}
 .g-again{color:var(--danger);border-color:var(--danger-line);background:var(--danger-soft);}
@@ -180,6 +185,7 @@ form input:focus,form textarea:focus,form select:focus{border-color:var(--brand)
 .tip{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 15px;font-size:13.5px;color:var(--brand-2);margin-bottom:14px;}
 .tip b{font-weight:800;}
 .note{font-size:12.5px;color:var(--muted);margin:8px 0 0;}
+.note.danger{color:var(--danger);}
 .level-chips{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
 .chip{border:1px solid var(--line);background:var(--card);padding:7px 16px;border-radius:999px;font-size:13px;font-weight:600;color:var(--muted);transition:.16s;}
 .chip:hover{border-color:var(--brand);color:var(--brand-2);}
@@ -222,6 +228,13 @@ mark.hl-zh{background:var(--soft);color:var(--brand-2);border-radius:4px;padding
 .chunk-item .ci-c{font-weight:700;color:var(--brand-2);font-size:14.5px;}
 .chunk-item .ci-m{font-size:13px;color:var(--muted);}
 .chunk-item .ci-sent{font-size:12px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.5;}
+.ci-pos{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:5px;background:var(--soft);color:var(--brand-2);font-size:11px;font-weight:600;vertical-align:1px;}
+.ci-pos.guess{background:transparent;border:1px dashed var(--line);color:var(--muted);font-weight:500;}
+.chunk-item .ci-senses{font-size:12.5px;color:var(--brand-2);margin-top:3px;line-height:1.6;}
+.chunk-item .ci-lbl{color:var(--muted);margin-right:4px;}
+.chunk-item .ci-mem{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6;padding-left:8px;border-left:2px solid var(--line);}
+.chunk-card .mem{font-size:12.5px;color:var(--muted);}
+.chunk-card .senses{font-size:12.5px;color:var(--brand-2);}
 .inline-input{width:100%;padding:5px 9px;border-radius:7px;border:1px solid var(--warn-soft);background:var(--card);font-size:12.5px;outline:none;color:var(--ink);}
 .inline-input:focus{border-color:var(--brand);box-shadow:0 0 0 2px rgba(47,158,110,.12);}
 .inline-tip{font-size:11px;color:var(--warn-ink);margin-top:3px;}
@@ -366,6 +379,11 @@ mark.hl-zh{background:var(--soft);color:var(--brand-2);border-radius:4px;padding
     <button class="tab" data-page="plan" role="tab" aria-selected="false" aria-controls="page-plan">计划</button>
     <button class="tab" data-page="stats" role="tab" aria-selected="false" aria-controls="page-stats">统计</button>
   </nav>
+  <div class="offline-tip" id="fileTip" hidden>
+    <span>双击打开时浏览器不让网页读本地的词典文件，所以离线词典没加载上——「我的文章」里提出的词块会少中文意思和其他义项。</span>
+    <span>想要完整功能，用桌面版（安装包或 <code>npm start</code>），也可以在源码目录跑 <code>npm run preview</code>。</span>
+    <button class="btn tiny ghost" id="btnFileTipClose" type="button">知道了，不再提示</button>
+  </div>
   <main>
     <section class="page active" id="page-today">
       <div class="hero"><div><p class="date" id="todayDate"></p><h2 id="greeting">今天学一点</h2></div><button class="btn primary" id="btnAddToday">＋ 记录词块</button></div>
@@ -473,6 +491,7 @@ mark.hl-zh{background:var(--soft);color:var(--brand-2);border-radius:4px;padding
           <select id="aiSiteSelect" aria-label="AI 站点" style="padding:7px 11px;border-radius:9px;border:1px solid var(--line);background:var(--card);">
             <option value="https://chat.deepseek.com/">DeepSeek（默认）</option>
             <option value="https://chatgpt.com/">ChatGPT</option>
+            <option value="https://www.qianwen.com/">千问</option>
             <option value="https://kimi.moonshot.cn/">Kimi</option>
             <option value="https://www.doubao.com/chat/">豆包</option>
             <option value="https://yuanbao.tencent.com/chat/">腾讯元宝</option>
@@ -521,15 +540,23 @@ mark.hl-zh{background:var(--soft);color:var(--brand-2);border-radius:4px;padding
       <div style="display:flex;gap:10px;">
         <label style="flex:1;">难度<select id="aLevel"><option value="beginner">初级</option><option value="intermediate" selected>中级</option><option value="advanced">高级</option></select></label>
         <label style="flex:1;">主题<input id="aTopic" placeholder="日常生活"></label>
+        <label style="flex:0 0 96px;">句数<input id="aSentCount" type="number" min="4" max="30" step="1" value="10"></label>
       </div>
       <div class="ai-prompt">
-        <p class="note" style="margin:0 0 8px;">不知道写什么好？把下面这段提示词复制给任意 AI（ChatGPT／Claude／豆包…），它会按你选的难度和主题写一篇，连中文逐句翻译一起给你，再粘回下面的输入框。</p>
+        <p class="note" style="margin:0 0 8px;">不知道写什么好？把下面这段提示词复制给任意 AI（ChatGPT／Claude／豆包…），它会按你选的等级、主题、句数写一篇，连中文逐句翻译和重点词块一起给你；把整段回答粘到下面的「从 AI 的回答里自动分段」，标题、英文、中文会自动分开填好。</p>
         <textarea id="aPrompt" rows="8" readonly spellcheck="false"></textarea>
         <div class="split-row">
           <button type="button" class="btn small primary" id="btnCopyPrompt">复制提示词</button>
-          <button type="button" class="btn small ghost" id="btnRefreshPrompt">按当前难度/主题重新生成</button>
+          <button type="button" class="btn small ghost" id="btnRefreshPrompt">按当前难度/主题/句数重新生成</button>
         </div>
       </div>
+      <label>从 AI 的回答里自动分段（可选）
+        <textarea id="aAiRaw" rows="5" placeholder="把 AI 的整段回答原样粘到这里（含 ### 英文原文 / ### 中文翻译 / ### 重点词块 那些小节），点下面的按钮会自动填好标题、英文原文与中文翻译"></textarea>
+      </label>
+      <div class="split-row">
+        <button type="button" class="btn small primary" id="btnParseAi">自动分段并填入下面</button>
+      </div>
+      <p class="note" id="aiParsedNote"></p>
       <label>英文原文 <span class="req">*</span>（自动按 . ! ? 切成句子，每句独立翻译）
         <textarea id="aText" rows="8" required placeholder="Sentence 1. Sentence 2. Sentence 3..."></textarea>
       </label>
