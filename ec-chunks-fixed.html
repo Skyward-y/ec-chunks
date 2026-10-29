@@ -539,9 +539,48 @@ mark.hl-zh{background:var(--soft);color:var(--brand-2);border-radius:4px;padding
       <label>中文标题<input id="aTitleZh" placeholder="我的第一次出国旅行"></label>
       <div style="display:flex;gap:10px;">
         <label style="flex:1;">难度<select id="aLevel"><option value="beginner">初级</option><option value="intermediate" selected>中级</option><option value="advanced">高级</option></select></label>
-        <label style="flex:1;">主题<input id="aTopic" placeholder="日常生活"></label>
+        <label style="flex:1.4;">主题<select id="aTopic">
+          <optgroup label="日常与生活">
+            <option value="日常生活" selected>日常生活</option>
+            <option value="日常对话">日常对话</option>
+            <option value="家庭与朋友">家庭与朋友</option>
+            <option value="饮食与烹饪">饮食与烹饪</option>
+            <option value="购物与消费">购物与消费</option>
+            <option value="住房与邻里">住房与邻里</option>
+          </optgroup>
+          <optgroup label="学习与工作">
+            <option value="学习与成长">学习与成长</option>
+            <option value="校园生活">校园生活</option>
+            <option value="职场沟通">职场沟通</option>
+            <option value="面试与求职">面试与求职</option>
+            <option value="科技与工具">科技与工具</option>
+            <option value="远程办公">远程办公</option>
+          </optgroup>
+          <optgroup label="兴趣与文化">
+            <option value="兴趣与坚持">兴趣与坚持</option>
+            <option value="运动与健康">运动与健康</option>
+            <option value="旅行与出行">旅行与出行</option>
+            <option value="音乐与电影">音乐与电影</option>
+            <option value="阅读与写作">阅读与写作</option>
+            <option value="节日与传统">节日与传统</option>
+          </optgroup>
+          <optgroup label="社会与观点">
+            <option value="科普">科普</option>
+            <option value="观点讨论">观点讨论</option>
+            <option value="环境与可持续">环境与可持续</option>
+            <option value="健康与心理">健康与心理</option>
+            <option value="金钱与理财">金钱与理财</option>
+            <option value="新闻与热点">新闻与热点</option>
+          </optgroup>
+          <optgroup label="情感与人际">
+            <option value="情绪与压力">情绪与压力</option>
+            <option value="人际沟通">人际沟通</option>
+          </optgroup>
+          <option value="__custom__">自定义…</option>
+        </select></label>
         <label style="flex:0 0 96px;">句数<input id="aSentCount" type="number" min="4" max="30" step="1" value="10"></label>
       </div>
+      <label id="aTopicCustomWrap" hidden>自定义主题<input id="aTopicCustom" placeholder="例如：和邻居的一次小摩擦"></label>
       <div class="ai-prompt">
         <p class="note" style="margin:0 0 8px;">不知道写什么好？把下面这段提示词复制给任意 AI（ChatGPT／Claude／豆包…），它会按你选的等级、主题、句数写一篇，连中文逐句翻译和重点词块一起给你；把整段回答粘到下面的「从 AI 的回答里自动分段」，标题、英文、中文会自动分开填好。</p>
         <textarea id="aPrompt" rows="8" readonly spellcheck="false"></textarea>

@@ -3523,7 +3523,8 @@ function openArticleModal(lesson){
   $('#aTitle').value = lesson ? lesson.title : '';
   $('#aTitleZh').value = lesson ? (lesson.titleZh || '') : '';
   $('#aLevel').value = lesson ? lesson.level : 'intermediate';
-  $('#aTopic').value = lesson ? (lesson.topic || '') : '';
+  /* 主题是下拉：认识的分类直接选中，老文章里手填的主题落到「自定义」并回填原文 */
+  setTopicField(lesson ? lesson.topic : '');
   $('#aText').value = lesson ? (lesson.text || []).join('\n') : '';
   /* 用 map 保留空位，缺译的那句留成空行，再次保存时不会让后面的译文整体前移 */
   $('#aTextZh').value = lesson ? (lesson.textZh || []).map(z => z || '').join('\n') : '';
@@ -3584,6 +3585,96 @@ function updateAlignNote(){
   }
 }
 
+/* ========== 主题分类 ==========
+   主题原来是自由输入框：填「日常生活」和填「生活」拿到的提示词一模一样，模型只看到几个字，
+   写出来的体裁、场景、常用词块全靠运气。现在每个分类带一段专属要求，会写进提示词的参数区：
+   体裁与场景、建议用上的表达方向、语气。
+   分类名本身就是 lesson.topic（和内置文章那套一致），不新增字段、不用迁移数据；
+   认不出来的主题（老文章手填的）落到「自定义」，用户填的文字照旧原样进提示词。
+   HTML 里的选项由 tools/smoke.js 的一条用例跟这张表对齐，改表忘了改页面会当场失败。 */
+const TOPIC_CUSTOM = '__custom__';
+const TOPIC_CATEGORIES = [
+  { group: '日常与生活', items: [
+    { label: '日常生活', guide: '写一天里具体的小事（起床、通勤、吃饭、回家），多用高频动词短语和具体时间，语气平实，不要讲道理。' },
+    { label: '日常对话', guide: '写成两个人一来一往的对话口吻（引号包住说的话），句子短，多用口语应答，不要书面腔。' },
+    { label: '家庭与朋友', guide: '写和家人或朋友相处的一个片段，有具体细节和对话，情感自然，不要说教。' },
+    { label: '饮食与烹饪', guide: '写一道菜的做法或一次吃饭的经历，多用食材、动作和味道的描写，不要写成菜谱清单。' },
+    { label: '购物与消费', guide: '写一次买东西或退换货的经历，出现价格、比较和最后的决定，别写成广告。' },
+    { label: '住房与邻里', guide: '写搬家、租房或和邻居打交道的一件小事，多用具体物件和地点。' }
+  ]},
+  { group: '学习与工作', items: [
+    { label: '学习与成长', guide: '写学一项新技能的过程，要有卡住、想放弃、再试一次这样的起伏，多用进步类表达。' },
+    { label: '校园生活', guide: '写学生视角的一天（课堂、作业、社团），场景具体，别写成人励志文。' },
+    { label: '职场沟通', guide: '写一次会议或邮件往来，用上礼貌请求与确认的常用说法，语气专业但不生硬。' },
+    { label: '面试与求职', guide: '写一段面试或求职经历，出现自我介绍、经历描述和回答问题的句子。' },
+    { label: '科技与工具', guide: '写某个 App 或设备的使用体验，说明性表达为主，术语第一次出现时给中文对应。' },
+    { label: '远程办公', guide: '写在家办公的一天，把自由与不便都写出来，多用对比类表达。' }
+  ]},
+  { group: '兴趣与文化', items: [
+    { label: '兴趣与坚持', guide: '写一项爱好是怎么坚持下来的，交代动机和变化，别说空话。' },
+    { label: '运动与健康', guide: '写一次运动或调整生活习惯的过程，突出身体感受和具体动作。' },
+    { label: '旅行与出行', guide: '写一次具体的旅行经历（出发、路上、到了之后的见闻），多用地点、交通、住宿类表达，不要写成攻略。' },
+    { label: '音乐与电影', guide: '写听一首歌或看一部电影的感受，描述细节和情绪，不要剧透情节。' },
+    { label: '阅读与写作', guide: '写读书或写作的习惯与一次具体体验，可以有引用和反思。' },
+    { label: '节日与传统', guide: '写一个节日怎么过，交代习俗细节，可带跨文化对比。' }
+  ]},
+  { group: '社会与观点', items: [
+    { label: '科普', guide: '解释一个科学现象或原理，因果关系要清楚，术语给中文对应，别写成百科条目。' },
+    { label: '观点讨论', guide: '围绕一个有争议的话题摆出两面，用上让步与反驳的句子（While…, However…）。' },
+    { label: '环境与可持续', guide: '写日常里的环保选择（垃圾分类、省电、少浪费），落到具体行动，不要空喊口号。' },
+    { label: '健康与心理', guide: '写压力、焦虑或情绪调节的一段经历，写法温和，不诊断、不说教。' },
+    { label: '金钱与理财', guide: '写存钱、预算或一次冲动消费，出现具体数字和取舍。' },
+    { label: '新闻与热点', guide: '概述一条新闻并谈它带来的影响，客观陈述为主，观点要标明是观点。' }
+  ]},
+  { group: '情感与人际', items: [
+    { label: '情绪与压力', guide: '写一段压力很大的经历以及怎么缓过来，情绪词要准，别堆形容词。' },
+    { label: '人际沟通', guide: '写一次误会、道歉或表达不同意见的沟通，有来有回。' }
+  ]}
+];
+/* 分类名 → 专属要求；用 Map 查表，顺带挡住手滑写出重复 label（后者覆盖前者） */
+const TOPIC_GUIDE = new Map();
+TOPIC_CATEGORIES.forEach(g => g.items.forEach(it => TOPIC_GUIDE.set(it.label, it.guide)));
+/* 没填主题时的默认分类：以前是空字符串，提示词里回落成「日常生活」，现在直接选中它 */
+const TOPIC_DEFAULT = '日常生活';
+
+/* 下拉框当前选的是什么 → { topic, guide, custom }
+   自定义时用输入框里的原文，没有专属要求；输入框空着仍然回落默认分类名，
+   免得提示词里出现「主题：」后面空一截。 */
+function currentTopicField(){
+  const sel = $('#aTopic');
+  const raw = String((sel && sel.value) || '').trim();
+  if (raw === TOPIC_CUSTOM){
+    const input = $('#aTopicCustom');
+    const typed = String((input && input.value) || '').trim();
+    return { topic: typed || TOPIC_DEFAULT, guide: '', custom: true };
+  }
+  const label = TOPIC_GUIDE.has(raw) ? raw : TOPIC_DEFAULT;
+  return { topic: label, guide: TOPIC_GUIDE.get(label) || '', custom: false };
+}
+/* 打开弹窗（编辑已有文章）时把 lesson.topic 还原到下拉框：
+   认识的分类直接选中，不认识的老主题落到「自定义」并把原文填进输入框。 */
+function setTopicField(value){
+  const v = String(value || '').trim();
+  const known = TOPIC_GUIDE.has(v);
+  const sel = $('#aTopic');
+  if (sel) sel.value = known ? v : (v ? TOPIC_CUSTOM : TOPIC_DEFAULT);
+  const input = $('#aTopicCustom');
+  if (input) input.value = known ? '' : v;
+  syncTopicCustom();
+}
+/* 「自定义…」时才显示输入框，其余分类把它藏起来（藏的输入框不参与取值，见 currentTopicField） */
+function syncTopicCustom(){
+  const wrap = $('#aTopicCustomWrap');
+  if (!wrap) return;
+  const sel = $('#aTopic');
+  const custom = String((sel && sel.value) || '').trim() === TOPIC_CUSTOM;
+  wrap.hidden = !custom;
+  if (custom){
+    const input = $('#aTopicCustom');
+    if (input) setTimeout(() => { try { input.focus(); } catch (e) { /* 桩 DOM 没有真实焦点，忽略 */ } }, 0);
+  }
+}
+
 /* ========== 「让 AI 写一篇」提示词 ==========
    用户常常不知道该拿什么文章来练。这里生成一段能直接粘给任意 AI 的提示词：
    难度、主题、长度、输出格式（英文逐句 + 中文逐句，正好对上下面两个输入框）都写死，
@@ -3615,8 +3706,9 @@ function buildAiPrompt(){
   const lvEl = $('#aLevel');
   const level = (lvEl && lvEl.value) || 'intermediate';
   const levelZh = LEVEL_LABEL[level] || LEVEL_LABEL.intermediate;
-  const topicEl = $('#aTopic');
-  const topic = String((topicEl && topicEl.value) || '').trim() || '日常生活';
+  /* 主题走 currentTopicField()：分类自带一段专属要求，自定义时只有主题名、没有要求。
+     有要求就多插一行，没要求就整行不出现（用 spread 插，免得留个空行）。 */
+  const topicField = currentTopicField();
   const count = promptSentCount();
   const chunkCount = promptChunkCount(count);
   /* 提示词按用户给的版本落地，只把「等级 / 主题 / 句数」三个参数填进去。
@@ -3626,7 +3718,8 @@ function buildAiPrompt(){
     "",
     "## 参数",
     `- 等级：${levelZh}`,
-    `- 主题：${topic}`,
+    `- 主题：${topicField.topic}`,
+    ...(topicField.guide ? [`- 主题要求：${topicField.guide}`] : []),
     `- 句数：${count}`,
     "",
     "## 写作要求",
@@ -4991,12 +5084,15 @@ function bindPromptPanel(){
   });
   bind('#btnRefreshPrompt', 'click', () => { refreshAiPrompt(); toast('已按当前难度、主题和句数重新生成'); });
   bind('#btnParseAi', 'click', fillFromAiOutput);
-  ['#aLevel', '#aTopic', '#aSentCount'].forEach(sel => {
+  ['#aLevel', '#aTopic', '#aTopicCustom', '#aSentCount'].forEach(sel => {
     const el = $(sel);
     if (!el) return;
     el.addEventListener('input', refreshAiPrompt);
     el.addEventListener('change', refreshAiPrompt);
   });
+  /* 选到「自定义…」才显出输入框；换回分类时把输入框收起（值留着，切回去还在） */
+  bind('#aTopic', 'change', syncTopicCustom);
+  syncTopicCustom();
 
   /* 逐句翻译 */
   bind('#btnAutoTranslate', 'click', async () => {
@@ -5094,7 +5190,7 @@ function bindArticleForm(){
       lesson.title = title;
       lesson.titleZh = $('#aTitleZh').value.trim();
       lesson.level = $('#aLevel').value;
-      lesson.topic = $('#aTopic').value.trim();
+      lesson.topic = currentTopicField().topic;
       lesson.text = textArr;
       lesson.textZh = zhArr;
       lesson.minutes = minutes;
@@ -5110,7 +5206,7 @@ function bindArticleForm(){
     } else {
       const newLesson = normalizeLesson({
         id: 'custom_' + uid(),
-        title, titleZh: $('#aTitleZh').value.trim(), level: $('#aLevel').value, topic: $('#aTopic').value.trim(),
+        title, titleZh: $('#aTitleZh').value.trim(), level: $('#aLevel').value, topic: currentTopicField().topic,
         text: textArr, textZh: zhArr, minutes, chunks: [], quiz: [], cloze: []
       });
       analyzeLesson(newLesson, { force: true });

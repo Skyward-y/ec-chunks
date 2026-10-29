@@ -524,11 +524,94 @@ test('提示词按句数定词块数，并要求词块原样出现在正文里',
 
 test('提示词只讲当前等级那一段，例子不摆两遍', () => {
   const p = loadApp().run('buildAiPrompt()');
-  assert.ok(p.length < 1400, '提示词瘦到 1400 字以内，现在 ' + p.length);
+  /* 主题分类那行 `- 主题要求：…` 最长的要求约 50 字，所以上限从 1400 放到 1450；
+     下面「每个分类的提示词都在 1450 字以内」会逐条兜住，别指望这句。 */
+  assert.ok(p.length < 1450, '提示词瘦到 1450 字以内，现在 ' + p.length);
   assert.ok(/## 难度标准\n- 中级：/.test(p), '难度标准只给当前等级那一条');
   assert.ok(!/初级：/.test(p) && !/高级：/.test(p), '别的等级不占字数');
   assert.strictEqual((p.match(/look forward to/g) || []).length, 1, '常见搭配的例子只在要求 7 里出现一次');
   assert.ok(/全文至少 7 个/.test(p), '删例子不能把词块数删掉');
+});
+
+console.log('主题分类');
+test('主题下拉的选项跟 TOPIC_CATEGORIES 对得上，不缺不多', () => {
+  const html = fs.readFileSync(HTML, 'utf8');
+  const box = html.slice(html.indexOf('<select id="aTopic"'), html.indexOf('<option value="__custom__">'));
+  /* 表里带出来的数组是 vm 里的数组（另一个 realm），比之前先搬成本地数组 */
+  const labels = Array.from(app.run('[...TOPIC_GUIDE.keys()]'));
+  const options = [...box.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(options, labels, 'HTML 里的选项要和表一一对应，顺序也一样');
+  const groups = Array.from(app.run('TOPIC_CATEGORIES.map(g => g.group)'));
+  const optgroups = [...box.matchAll(/<optgroup label="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(optgroups, groups, '分组名也要对得上');
+  assert.ok(labels.length >= 20, '分类要够多，用户才有得挑，现在 ' + labels.length);
+  assert.strictEqual(new Set(labels).size, labels.length, '分类名不能重复（重复会互相覆盖提示词）');
+});
+
+test('每个分类都有一段专属要求，长度适中', () => {
+  const table = app.run('TOPIC_CATEGORIES.flatMap(g => g.items.map(it => ({ label: it.label, guide: it.guide })))');
+  assert.strictEqual(table.length, app.run('TOPIC_GUIDE.size'), '每个分类都得在 Map 里查得到');
+  table.forEach((it) => {
+    assert.ok(it.guide && it.guide.trim().length >= 15, it.label + ' 的专属要求太短，等于没写：' + it.guide);
+    assert.ok(it.guide.length <= 60, it.label + ' 的专属要求太长，会把提示词撑胖：' + it.guide);
+  });
+});
+
+test('内置文章的主题都在分类表里，编辑时不会掉进「自定义」', () => {
+  const topics = Array.from(app.run('[...new Set(allLessons().map(l => l.topic))]'));
+  const labels = new Set(Array.from(app.run('[...TOPIC_GUIDE.keys()]')));
+  /* 「复习」是复习短文自己生成的临时文章，不会进编辑弹窗 */
+  const missing = topics.filter((t) => t !== '复习' && !labels.has(t));
+  assert.deepStrictEqual(missing, [], '这些内置主题在分类表里查不到：' + missing.join('、'));
+});
+
+test('选了分类，提示词带上这个分类的专属要求', () => {
+  const withTopic = (value) => {
+    const el = makeEl();
+    el.value = value;
+    return loadApp({ els: { aTopic: el } }).run('buildAiPrompt()');
+  };
+  const p = withTopic('科普');
+  assert.ok(/- 主题：科普/.test(p), '主题名要进参数区');
+  assert.ok(/- 主题要求：.*因果关系要清楚/.test(p), '分类专属要求要进提示词');
+  assert.ok(p.length < 1450, '带上要求也不能撑爆，现在 ' + p.length);
+  /* 换一个分类，要求跟着换 */
+  const q = withTopic('旅行与出行');
+  assert.ok(/- 主题：旅行与出行/.test(q) && /- 主题要求：.*攻略/.test(q), '换分类就换要求');
+  assert.ok(!/因果关系要清楚/.test(q), '不能留下上一个分类的要求');
+});
+
+test('自定义主题：用用户原话，且不硬塞一段无关的专属要求', () => {
+  const sel = makeEl();
+  sel.value = '__custom__';
+  const input = makeEl();
+  input.value = '和邻居的一次小摩擦';
+  const r = loadApp({ els: { aTopic: sel, aTopicCustom: input } }).run('buildAiPrompt()');
+  assert.ok(/- 主题：和邻居的一次小摩擦/.test(r), '自定义要原样进提示词');
+  assert.ok(!/主题要求：/.test(r), '自定义没有专属要求，整行不该出现');
+  /* 选着自定义却什么都没填：别让提示词里「主题：」后面空一截 */
+  const empty = makeEl();
+  empty.value = '__custom__';
+  const r2 = loadApp({ els: { aTopic: empty, aTopicCustom: makeEl() } }).run('buildAiPrompt()');
+  assert.ok(/- 主题：日常生活/.test(r2), '空的自定义回落到默认分类');
+});
+
+test('打开已有文章：认识的分类选中，认不出的老主题落自定义并回填', () => {
+  const sel = makeEl();
+  const input = makeEl();
+  const wrap = makeEl();
+  const a = loadApp({ els: { aTopic: sel, aTopicCustom: input, aTopicCustomWrap: wrap } });
+  a.run('setTopicField("科普")');
+  assert.strictEqual(sel.value, '科普', '认识的分类直接选中');
+  assert.strictEqual(input.value, '', '选分类时输入框要清空');
+  assert.strictEqual(wrap.hidden, true, '不是自定义就把输入框收起来');
+  a.run('setTopicField("跟老外点咖啡")');
+  assert.strictEqual(sel.value, '__custom__', '不认识的老主题落到自定义');
+  assert.strictEqual(input.value, '跟老外点咖啡', '原文要回填，编辑时不能丢');
+  assert.strictEqual(wrap.hidden, false, '自定义要把输入框露出来');
+  assert.strictEqual(a.run('currentTopicField().topic'), '跟老外点咖啡', '存回去还是原来那句');
+  a.run('setTopicField("")');
+  assert.strictEqual(a.run('currentTopicField().topic'), '日常生活', '没填主题就用默认分类');
 });
 
 test('待练词块按到期日挑，带上中文意思，已掌握的就不再塞进提示词', () => {
