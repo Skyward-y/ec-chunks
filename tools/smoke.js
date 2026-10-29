@@ -503,6 +503,12 @@ test('提示词是新版模板：参数填进等级/主题/句数，重点词块
   assert.ok(r.includes('take off') && r.includes('catch up'), '没掌握的表达顺手用上');
   assert.ok(!r.includes('old one'), '已掌握的不要再塞进去');
   assert.ok(!/【英文】/.test(r), '旧的两段式格式已经换成 Markdown 小节');
+  /* 末尾那两行示例（make a decision / in the end）已经删掉，格式样例那行还留着给模型照抄 */
+  assert.ok(
+    /- 词块（词性）：中文意思；另一个常见意思（没有就不写）｜助记：一句话的记忆钩子/.test(r),
+    '格式样例那行要留着，模型靠它对齐'
+  );
+  assert.ok(!/做决定；下定决心/.test(r) && !/走到路的尽头就是最终/.test(r), '末尾的示例已经去掉，别再塞回去');
 });
 
 test('提示词按句数定词块数，并要求词块原样出现在正文里', () => {
