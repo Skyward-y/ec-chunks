@@ -3616,7 +3616,7 @@ const TOPIC_CATEGORIES = [
     { label: '旅行与出行', guide: '写一次具体的旅行经历（出发、路上、到了之后的见闻），多用地点、交通、住宿类表达，不要写成攻略。' },
     { label: '音乐与电影', guide: '写听一首歌或看一部电影的感受，描述细节和情绪，不要剧透情节。' },
     { label: '阅读与写作', guide: '写读书或写作的习惯与一次具体体验，可以有引用和反思。' },
-    { label: '经典名著节选', guide: '仿 19 世纪英语小说笔法写一段节选：长句与从句为主，景物与心理描写多、对话少，措辞可略高于所选等级。' },
+    { label: '经典名著节选', excerpt: true, guide: '摘录一段经典英语名著的真实原文，逐字照抄、不改写不仿写；英文标题写书名，中文标题写译名并注明作者。' },
     { label: '节日与传统', guide: '写一个节日怎么过，交代习俗细节，可带跨文化对比。' }
   ]},
   { group: '社会与观点', items: [
@@ -3635,10 +3635,15 @@ const TOPIC_CATEGORIES = [
 /* 分类名 → 专属要求；用 Map 查表，顺带挡住手滑写出重复 label（后者覆盖前者） */
 const TOPIC_GUIDE = new Map();
 TOPIC_CATEGORIES.forEach(g => g.items.forEach(it => TOPIC_GUIDE.set(it.label, it.guide)));
+/* 摘抄类分类（表里标了 excerpt）：「主题要求」不是让 AI 怎么写，而是让它照抄哪一段原文。
+   这类主题的正文一个字都不能改，所以提示词里「把还没掌握的表达用进正文」要换成
+   「原文里有就收进重点词块」，否则模型为了塞词块会把原文改写掉，正好和目标相反。 */
+const TOPIC_EXCERPT = new Set();
+TOPIC_CATEGORIES.forEach(g => g.items.forEach(it => { if (it.excerpt) TOPIC_EXCERPT.add(it.label); }));
 /* 没填主题时的默认分类：以前是空字符串，提示词里回落成「日常生活」，现在直接选中它 */
 const TOPIC_DEFAULT = '日常生活';
 
-/* 下拉框当前选的是什么 → { topic, guide, custom }
+/* 下拉框当前选的是什么 → { topic, guide, custom, excerpt }
    自定义时用输入框里的原文，没有专属要求；输入框空着仍然回落默认分类名，
    免得提示词里出现「主题：」后面空一截。 */
 function currentTopicField(){
@@ -3647,10 +3652,10 @@ function currentTopicField(){
   if (raw === TOPIC_CUSTOM){
     const input = $('#aTopicCustom');
     const typed = String((input && input.value) || '').trim();
-    return { topic: typed || TOPIC_DEFAULT, guide: '', custom: true };
+    return { topic: typed || TOPIC_DEFAULT, guide: '', custom: true, excerpt: false };
   }
   const label = TOPIC_GUIDE.has(raw) ? raw : TOPIC_DEFAULT;
-  return { topic: label, guide: TOPIC_GUIDE.get(label) || '', custom: false };
+  return { topic: label, guide: TOPIC_GUIDE.get(label) || '', custom: false, excerpt: TOPIC_EXCERPT.has(label) };
 }
 /* 打开弹窗（编辑已有文章）时把 lesson.topic 还原到下拉框：
    认识的分类直接选中，不认识的老主题落到「自定义」并把原文填进输入框。 */
@@ -3726,7 +3731,9 @@ function buildAiPrompt(){
     "## 写作要求",
     "1. 英文自然、地道，符合指定等级，不要写成教科书式生硬句子。",
     "2. 每句话只用一个句号、问号或感叹号结尾。不要用分号把多个意思串成一句。",
-    "3. 不要在句中写句点：别用缩写句点（Mr.、Mrs.、Dr.、a.m.、p.m.、U.S.、U.K.、e.g.、i.e.、etc.），别写小数（如 3.14），也别用省略号。程序只按句号分句，多一个点就会把句子切碎。",
+    "3. " + (topicField.excerpt
+      ? "正文是摘抄来的真实原文，逐字照抄：不改写、不拼接、不自己仿写，也不要为了迁就句式替换词；按上面句数从同一处连续摘录，段落里若有缩写句点（Mr.、Dr.、p.m.）、小数或分号，就换到下一句或改摘另一部名著——程序只按句号分句。"
+      : "不要在句中写句点：别用缩写句点（Mr.、Mrs.、Dr.、a.m.、p.m.、U.S.、U.K.、e.g.、i.e.、etc.），别写小数（如 3.14），也别用省略号。程序只按句号分句，多一个点就会把句子切碎。"),
     "4. 英文句子不要加编号（不要写 1. 2. 3.），每句单独一行即可。",
     `5. 每 1–2 句自然出现一个常用搭配或短语，全文至少 ${chunkCount} 个，方便学习者积累词块（常见短语见下面第 7 条的对照）。`,
     "6. 中文翻译必须逐句对应：英文第 1 句对应中文第 1 句，英文第 2 句对应中文第 2 句，以此类推。句数必须完全一致。",
@@ -3744,10 +3751,10 @@ function buildAiPrompt(){
     "## 输出格式（严格遵守，不要添加额外说明）",
     "",
     "### 英文标题",
-    "[英文标题]",
+    topicField.excerpt ? "[英文书名]" : "[英文标题]",
     "",
     "### 中文标题",
-    "[中文标题]",
+    topicField.excerpt ? "[中文译名（作者）]" : "[中文标题]",
     "",
     "### 英文原文",
     "第 1 句。",
@@ -3778,7 +3785,9 @@ function buildAiPrompt(){
     const least = Math.min(3, words.length);
     lines.push(
       "",
-      "（重要）下面 " + words.length + " 个是我还没掌握的表达（括号里是我想练的意思），请自然地用进正文，至少用上 " + least + " 个；不要硬塞，也不要单独列成一段：",
+      topicField.excerpt
+        ? "（重要）下面 " + words.length + " 个是我还没掌握的表达（括号里是我想练的意思）。正文是摘抄的原文、一个字都不能改，所以不要往正文里塞：这些表达出现在原文里就都收进重点词块（释义和助记照常给），没出现的忽略："
+        : "（重要）下面 " + words.length + " 个是我还没掌握的表达（括号里是我想练的意思），请自然地用进正文，至少用上 " + least + " 个；不要硬塞，也不要单独列成一段：",
       words.map(w => "- " + w).join("\n")
     );
   }

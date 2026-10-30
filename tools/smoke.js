@@ -587,6 +587,34 @@ test('选了分类，提示词带上这个分类的专属要求', () => {
   assert.ok(!/因果关系要清楚/.test(q), '不能留下上一个分类的要求');
 });
 
+test('摘抄类分类：要的是名著原文，不是仿写；词块那段也得跟着改', () => {
+  const withTopic = (value) => {
+    const el = makeEl();
+    el.value = value;
+    return loadApp({ els: { aTopic: el } });
+  };
+  const a = withTopic('经典名著节选');
+  const p = a.run('buildAiPrompt()');
+  assert.ok(/- 主题：经典名著节选/.test(p), '主题名要进参数区');
+  assert.ok(/- 主题要求：.*真实原文/.test(p), '要求里要写明摘的是真实原文');
+  assert.ok(/- 主题要求：.*逐字照抄/.test(p), '要求里要写明逐字照抄');
+  assert.ok(!/仿\s*19\s*世纪|笔法写一段/.test(p), '参数区不许再让模型「仿写」——用户要的是原文');
+  assert.ok(/正文是摘抄来的真实原文，逐字照抄/.test(p), '写作要求第 3 条要换成摘抄版');
+  assert.ok(!/不要在句中写句点/.test(p), '摘抄版不再要求避开句点：原文由不得你改，只能换段落');
+  assert.ok(/\[英文书名\]/.test(p) && /\[中文译名（作者）\]/.test(p), '标题直接要书名与作者，省得自己化妆');
+
+  /* 有未掌握的词块时也不能让模型「用进正文」，否则它必然改写原文 */
+  const b = withTopic('经典名著节选');
+  b.run(`state.chunks = [
+    { id:'1', chunk:'give up', meaning:'放弃', nextReview:'2026-11-01', added:'2026-10-01' }
+  ]; "ok"`);
+  const q = b.run('buildAiPrompt()');
+  assert.ok(/一个字都不能改/.test(q), '词块那段也要强调原文不能动');
+  assert.ok(!/请自然地用进正文/.test(q), '摘抄时不许说「用进正文」');
+  assert.ok(/- give up（放弃）/.test(q), '词块照样列出来，让 AI 收进重点词块');
+  assert.ok(q.length < 1500, '摘抄版说明更长，也不能撑爆，现在 ' + q.length);
+});
+
 test('自定义主题：用用户原话，且不硬塞一段无关的专属要求', () => {
   const sel = makeEl();
   sel.value = '__custom__';
