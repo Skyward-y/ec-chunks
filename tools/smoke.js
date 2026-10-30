@@ -617,7 +617,7 @@ test('摘抄类分类：要的是名著原文，不是仿写；词块那段也�
 
 console.log('内置名著节选');
 
-test('名著篇目下拉跟内置书单对得上，三档各两本', () => {
+test('名著篇目下拉跟内置书单对得上，三档各四本', () => {
   const html = fs.readFileSync(HTML, 'utf8');
   const start = html.indexOf('<select id="aExcerpt">');
   assert.ok(start > 0, 'HTML 里要有篇目下拉');
@@ -635,7 +635,7 @@ test('名著篇目下拉跟内置书单对得上，三档各两本', () => {
     const got = [...chunk.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
     const want = Array.from(app.run(`EXCERPT_BOOKS.filter(b => b.level === '${levelOf[label]}').map(b => b.id)`));
     assert.deepStrictEqual(got, want, label + '那组要对得上');
-    assert.ok(want.length >= 2, label + '至少两本，用户才有得挑');
+    assert.ok(want.length >= 4, label + '至少四本，用户才有得挑');
   });
 });
 

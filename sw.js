@@ -14,7 +14,7 @@
 const CACHE_PREFIX = 'ecchunks-';
 /* 版本号由 tools/stamp-sw.js 按静态资源内容哈希重写，不要手写：手写必然忘记 bump，
  * 结果就是改了 app.js 之后老用户一直看到旧页面。 */
-const CACHE_VERSION = '0748b0b6a2';
+const CACHE_VERSION = '74f25587a3';
 const CACHE = CACHE_PREFIX + CACHE_VERSION;
 
 /* 安装时尽量预缓存；任何一个 404 都不应让安装失败。

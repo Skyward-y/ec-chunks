@@ -3725,10 +3725,14 @@ function syncTopicExtra(){
 
 /* ========== 经典名著节选：内置原文 ==========
    主题选「经典名著节选」时，光靠 AI 记原文是赌运气：错一个字、拼两段，学的人就学到错的。
-   这里逐字录入 6 段公有领域原文（各句对着 Project Gutenberg 电子版核过），中英成对存 ——
+   这里逐字录入 12 段公有领域原文（各句对着 Project Gutenberg 电子版核过），中英成对存 ——
    程序不猜句界，也不联网取，选好篇目直接填进表单，保存即可。
-   三档各两本：初级《绿野仙踪》《爱丽丝梦游仙境》，中级《福尔摩斯冒险史》《野性的呼唤》，
-   高级《傲慢与偏见》《简·爱》。HTML 里的篇目下拉由 tools/smoke.js 的用例跟这张表对齐。 */
+   三档各四本：初级《绿野仙踪》《爱丽丝梦游仙境》《绒布兔子》《彼得·潘》，
+   中级《福尔摩斯冒险史》《野性的呼唤》《金银岛》《圣诞颂歌》，
+   高级《傲慢与偏见》《简·爱》《呼啸山庄》《化身博士》。
+   两处排版损失按原书补回来（不是改字）：绒布兔子首句的 THERE、马利首句的 Marley，
+   电子版里分别是丢掉首字母的 HERE 与小体大写的 MARLEY。
+   HTML 里的篇目下拉由 tools/smoke.js 的用例跟这张表对齐。 */
 const EXCERPT_BOOKS = [
   {
     id: "oz",
@@ -3771,6 +3775,40 @@ const EXCERPT_BOOKS = [
     ]
   },
   {
+    id: "velveteen",
+    title: "The Velveteen Rabbit",
+    titleZh: "绒布兔子",
+    author: "Margery Williams",
+    year: 1922,
+    level: "beginner",
+    note: "开篇",
+    lines: [
+      ["THERE was once a velveteen rabbit, and in the beginning he was really splendid.", "从前有一只绒布兔子，起初他漂亮极了。"],
+      ["He was fat and bunchy, as a rabbit should be; his coat was spotted brown and white, he had real thread whiskers, and his ears were lined with pink sateen.", "他胖乎乎、鼓鼓囊囊的，兔子就该是这个样子；他的外套是棕白相间的斑点，胡须是真线做的，耳朵里衬着粉色的缎面。"],
+      ["On Christmas morning, when he sat wedged in the top of the Boy's stocking, with a sprig of holly between his paws, the effect was charming.", "圣诞节的早晨，他被塞在男孩袜子的最上头，两只爪子中间夹着一小枝冬青，那模样真是可爱极了。"],
+      ["There were other things in the stocking, nuts and oranges and a toy engine, and chocolate almonds and a clockwork mouse, but the Rabbit was quite the best of all.", "袜子里还装着别的东西：坚果、橘子、一个玩具火车头、巧克力杏仁和一只发条老鼠，可兔子是其中最好的。"],
+      ["For at least two hours the Boy loved him, and then Aunts and Uncles came to dinner, and there was a great rustling of tissue paper and unwrapping of parcels, and in the excitement of looking at all the new presents the Velveteen Rabbit was forgotten.", "至少有两个钟头，男孩都很爱他；接着叔叔婶婶们来吃晚饭，到处是揉纸、拆包裹的窸窣声，忙着看那些新礼物的热闹里，绒布兔子就被忘掉了。"]
+    ]
+  },
+  {
+    id: "peterpan",
+    title: "Peter Pan",
+    titleZh: "彼得·潘",
+    author: "J. M. Barrie",
+    year: 1911,
+    level: "beginner",
+    note: "第一章《彼得闯进来》开篇",
+    lines: [
+      ["All children, except one, grow up.", "所有的孩子都会长大，只有一个例外。"],
+      ["They soon know that they will grow up, and the way Wendy knew was this.", "他们很快就知道自己总要长大，而温迪是怎么知道的，经过是这样的。"],
+      ["One day when she was two years old she was playing in a garden, and she plucked another flower and ran with it to her mother.", "她两岁那年的一天，正在花园里玩，又摘了一朵花，跑着送到母亲面前。"],
+      ["I suppose she must have looked rather delightful, for Mrs. Darling put her hand to her heart and cried, “Oh, why can’t you remain like this for ever!”", "我猜想她当时的样子一定很讨人喜欢，因为达林太太把手按在胸口，喊了出来：“啊，你怎么就不能永远这样呢！”"],
+      ["This was all that passed between them on the subject, but henceforth Wendy knew that she must grow up.", "关于这件事，她们之间只说了这些；但从那以后温迪就明白，自己总有一天要长大。"],
+      ["You always know after you are two.", "过了两岁，你总会明白的。"],
+      ["Two is the beginning of the end.", "两岁就是结束的开始。"]
+    ]
+  },
+  {
     id: "holmes",
     title: "The Adventures of Sherlock Holmes",
     titleZh: "福尔摩斯冒险史",
@@ -3805,6 +3843,38 @@ const EXCERPT_BOOKS = [
       ["Judge Miller’s place, it was called.", "那地方叫米勒法官的庄园。"],
       ["It stood back from the road, half hidden among the trees, through which glimpses could be caught of the wide cool veranda that ran around its four sides.", "它离大路有一段距离，半掩在树丛里，透过树影能瞥见绕着房子四面的一圈宽阔凉爽的走廊。"],
       ["The house was approached by gravelled driveways which wound about through wide-spreading lawns and under the interlacing boughs of tall poplars.", "通到房子的碎石车道弯弯曲曲地穿过开阔的草坪，又钻过高大杨树交错的枝叶。"]
+    ]
+  },
+  {
+    id: "treasure",
+    title: "Treasure Island",
+    titleZh: "金银岛",
+    author: "Robert Louis Stevenson",
+    year: 1883,
+    level: "intermediate",
+    note: "第一章《老海盗在本鲍将军旅馆》开篇",
+    lines: [
+      ["Squire Trelawney, Dr. Livesey, and the rest of these gentlemen having asked me to write down the whole particulars about Treasure Island, from the beginning to the end, keeping nothing back but the bearings of the island, and that only because there is still treasure not yet lifted, I take up my pen in the year of grace 17—, and go back to the time when my father kept the Admiral Benbow inn and the brown old seaman with the sabre cut first took up his lodging under our roof.", "乡绅特里劳尼、李沃西医生和其余几位先生要我把金银岛的全部经过从头到尾写下来，只隐去藏宝的地点位次——这么做也只是因为岛上还有宝物没起出来；于是我就在一七××年执笔，回溯我父亲开“本鲍将军”旅馆、那个脸上带刀疤的褐脸老水手头一回住进我们店里的年月。"],
+      ["I remember him as if it were yesterday, as he came plodding to the inn door, his sea-chest following behind him in a hand-barrow--a tall, strong, heavy, nut-brown man, his tarry pigtail falling over the shoulder of his soiled blue coat, his hands ragged and scarred, with black, broken nails, and the sabre cut across one cheek, a dirty, livid white.", "我记得他，就像记得昨天的事：他拖着脚步走到旅馆门口，海箱跟在后头被人用手推车推着——一个高大、壮实、沉甸甸、栗壳色的男人，涂了柏油的辫子耷拉在脏兮兮的蓝外套肩头，一双手粗糙、满是伤疤，指甲发黑、残缺不全，一边脸颊上横着一道刀疤，脏兮兮的，泛着青白。"],
+      ["I remember him looking round the cove and whistling to himself as he did so, and then breaking out in that old sea-song that he sang so often afterwards: “Fifteen men on the dead man’s chest-- Yo-ho-ho, and a bottle of rum!” in the high, old tottering voice that seemed to have been tuned and broken at the capstan bars.", "我记得他打量那个小海湾，一边看一边自己吹着口哨，随后就用那种又高又老、抖抖索索的嗓子唱起那支他后来常唱的老水手歌——那嗓子像是被绞盘的杠子调过音、又磨破过：“死人的箱子上有十五个人哟——哟嗬嗬，还有一瓶朗姆酒！”"],
+      ["Then he rapped on the door with a bit of stick like a handspike that he carried, and when my father appeared, called roughly for a glass of rum.", "然后他用随身带着的、像根撬杠似的短木棍敲了敲门，我父亲一露面，他就粗声粗气地要一杯朗姆酒。"],
+      ["This, when it was brought to him, he drank slowly, like a connoisseur, lingering on the taste and still looking about him at the cliffs and up at our signboard.", "酒端来后，他慢慢地喝，像个行家似的品味流连，一边还打量着四周的峭壁，抬头看看我们的招牌。"]
+    ]
+  },
+  {
+    id: "carol",
+    title: "A Christmas Carol",
+    titleZh: "圣诞颂歌",
+    author: "Charles Dickens",
+    year: 1843,
+    level: "intermediate",
+    note: "第一节《马利的鬼魂》开篇",
+    lines: [
+      ["Marley was dead: to begin with.", "先说清楚：马利死了。"],
+      ["There is no doubt whatever about that.", "这一点毫无疑问。"],
+      ["The register of his burial was signed by the clergyman, the clerk, the undertaker, and the chief mourner.", "他的下葬登记由牧师、教堂文书、殡葬承办人和主丧人签了字。"],
+      ["Scrooge signed it: and Scrooge's name was good upon 'Change, for anything he chose to put his hand to.", "斯克鲁奇签了字：而斯克鲁奇的名字在交易所里是管用的，凡是他肯签的东西。"],
+      ["Old Marley was as dead as a door-nail.", "老马利死得不能再死了，就跟门钉一样。"]
     ]
   },
   {
@@ -3844,6 +3914,40 @@ const EXCERPT_BOOKS = [
       ["“What does Bessie say I have done?” I asked.", "“贝茜说我做了什么了？”我问。"],
       ["“Jane, I don’t like cavillers or questioners; besides, there is something truly forbidding in a child taking up her elders in that manner.", "“简，我不喜欢挑三拣四、爱顶嘴的人；再说，小孩子那样跟长辈说话，确实让人看不下去。”"],
       ["Be seated somewhere; and until you can speak pleasantly, remain silent.”", "“找个地方坐下；在你能好好说话之前，就闭着嘴。”"]
+    ]
+  },
+  {
+    id: "wh",
+    title: "Wuthering Heights",
+    titleZh: "呼啸山庄",
+    author: "Emily Brontë",
+    year: 1847,
+    level: "advanced",
+    note: "第一章开篇（房客洛克伍德的日记）",
+    lines: [
+      ["I have just returned from a visit to my landlord—the solitary neighbour that I shall be troubled with.", "我刚去拜访过房东回来——往后少不了要打交道的那位独居的邻居。"],
+      ["This is certainly a beautiful country!", "这地方当然风景很好！"],
+      ["In all England, I do not believe that I could have fixed on a situation so completely removed from the stir of society.", "在全英格兰，我相信再也挑不出一处比这儿更远离尘嚣的地方了。"],
+      ["A perfect misanthropist’s Heaven—and Mr. Heathcliff and I are such a suitable pair to divide the desolation between us.", "一处厌世者的完美天堂——希思克利夫先生和我恰好是一对，正好把这片荒凉平分。"],
+      ["A capital fellow!", "一个顶好的人！"],
+      ["He little imagined how my heart warmed towards him when I beheld his black eyes withdraw so suspiciously under their brows, as I rode up, and when his fingers sheltered themselves, with a jealous resolution, still further in his waistcoat, as I announced my name.", "他哪里想到，当我骑马走近，看见他那双黑眼睛满腹疑虑地缩在眉毛底下，听见我报上姓名时他的手指带着戒备的决心、更深地躲进马甲里，我的心对他有多热。"],
+      ["“Mr. Heathcliff?” I said.", "“希思克利夫先生？”我开了口。"]
+    ]
+  },
+  {
+    id: "jekyll",
+    title: "The Strange Case of Dr. Jekyll and Mr. Hyde",
+    titleZh: "化身博士",
+    author: "Robert Louis Stevenson",
+    year: 1886,
+    level: "advanced",
+    note: "《门的故事》开篇",
+    lines: [
+      ["Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted by a smile; cold, scanty and embarrassed in discourse; backward in sentiment; lean, long, dusty, dreary and yet somehow lovable.", "律师厄特森先生是个面容粗犷的人，那张脸从来没有被笑容照亮过；言谈冷淡、简短而拘谨；感情上往后退缩；人瘦长、干枯、灰扑扑、阴沉沉，可不知怎的又让人喜欢。"],
+      ["At friendly meetings, and when the wine was to his taste, something eminently human beaconed from his eye; something indeed which never found its way into his talk, but which spoke not only in these silent symbols of the after-dinner face, but more often and loudly in the acts of his life.", "在朋友聚会上、或酒正合他口味的时候，他眼里会亮起某种十足人性的东西；那东西确实从没进过他的谈话，却不仅在饭后那张脸沉默的符号里，更常常、更响亮地出现在他一生的所作所为里。"],
+      ["He was austere with himself; drank gin when he was alone, to mortify a taste for vintages; and though he enjoyed the theatre, had not crossed the doors of one for twenty years.", "他对自己很严厉；独自一人时喝杜松子酒，好压一压对陈年佳酿的喜好；虽然爱看戏，却有二十年没进过剧院的门。"],
+      ["But he had an approved tolerance for others; sometimes wondering, almost with envy, at the high pressure of spirits involved in their misdeeds; and in any extremity inclined to help rather than to reprove.", "但他对别人怀着一种经得起检验的宽容；有时几乎带着羡慕，惊叹人们在干坏事时那股高涨的心气；不论事情多极端，他也更愿意伸手帮一把，而不是责备。"],
+      ["“I incline to Cain’s heresy,” he used to say quaintly: “I let my brother go to the devil in his own way.”", "“我呀，偏向该隐那套异端说法，”他常说得古怪，“我让我兄弟照他自己的路子去见鬼。”"]
     ]
   }
 ];
