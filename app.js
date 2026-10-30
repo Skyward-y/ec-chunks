@@ -1026,6 +1026,19 @@ function speakBtn(text, lang){
 }
 
 /* ========== 分段（按 . ! ? 切分） ========== */
+/* 引号里的句子后面紧跟「说话人」（“Do not you want to know?” cried his wife.）时，
+   问号/叹号/句号加收尾引号之后跟的是小写字母，说明这句还没说完——要并回上一句。
+   不并的话「cried his wife, impatiently.」会单独成句，中英逐句对齐就整体错位一格。 */
+const SENT_TAIL_QUOTE = /[.!?]["'”’]$/;
+function joinsWithPrevious(prev, next){
+  const p = String(prev || '').trim();
+  const n = String(next || '').trim();
+  if (!n || !SENT_TAIL_QUOTE.test(p)) return false;
+  if (/^[a-z]/.test(n)) return true;
+  /* 「“What does Bessie say I have done?” I asked.」：代词 I 天生大写，但它也是说话人，
+     只有问号/叹号结尾时才算（句号结尾的「He said "Stop." I did.」是两句，不能并）。 */
+  return /^I(\s|['’])/.test(n) && /[?!]["'”’]$/.test(p);
+}
 /* 用「匹配位置」计算剩余尾巴，避免原先「join 后 replace/slice」在句间有空格时错位 */
 function splitByRegex(text, re){
   const clean = String(text || '').replace(/\s+/g, ' ').trim();
@@ -1042,7 +1055,14 @@ function splitByRegex(text, re){
   if (!out.length) return [clean];
   const remaining = clean.slice(last).trim();
   if (remaining) out.push(remaining);
-  return out;
+  /* 收尾引号后跟小写开头的，并回上一句（见 joinsWithPrevious） */
+  const merged = [];
+  out.forEach(s => {
+    const prev = merged[merged.length - 1];
+    if (prev !== undefined && joinsWithPrevious(prev, s)) merged[merged.length - 1] = prev + ' ' + s;
+    else merged.push(s);
+  });
+  return merged;
 }
 /* 句点不全都是句末：缩写（a.m. / U.S. / Mr.）和小数（3.50）里的点要是也拿来切，
    「We left at 9 a.m. It was cold.」会变成 3 段。做法是把这些点先换成占位符，切完再换回来。
@@ -2236,7 +2256,16 @@ function splitSegments(text, re){
      列表版（splitByRegex）也是这么补的，两个版本必须给出同样的句子。 */
   const tail = src.slice(last);
   if (tail.trim()) out.push({ text: tail, start: last, end: src.length });
-  return out;
+  /* 与列表版同一条规则：收尾引号后跟小写开头的并回上一句 */
+  const merged = [];
+  out.forEach(seg => {
+    const prev = merged[merged.length - 1];
+    if (prev && joinsWithPrevious(prev.text, seg.text)){
+      prev.text = prev.text.trim() + ' ' + seg.text.trim();
+      prev.end = seg.end;
+    } else merged.push({ text: seg.text, start: seg.start, end: seg.end });
+  });
+  return merged;
 }
 function splitEnSegments(text){
   return splitSegments(holdSentenceDots(text), EN_SENT_RE).map(seg => ({
@@ -3666,19 +3695,182 @@ function setTopicField(value){
   if (sel) sel.value = known ? v : (v ? TOPIC_CUSTOM : TOPIC_DEFAULT);
   const input = $('#aTopicCustom');
   if (input) input.value = known ? '' : v;
-  syncTopicCustom();
+  syncTopicExtra();
 }
-/* 「自定义…」时才显示输入框，其余分类把它藏起来（藏的输入框不参与取值，见 currentTopicField） */
-function syncTopicCustom(){
-  const wrap = $('#aTopicCustomWrap');
-  if (!wrap) return;
+/* 主题下拉决定两个跟随控件谁露面：
+   「自定义…」→ 自定义主题输入框；摘抄类分类（经典名著节选）→ 名著篇目下拉。
+   藏起来的输入框不参与取值（见 currentTopicField / excerptBook）。 */
+function syncTopicExtra(){
   const sel = $('#aTopic');
-  const custom = String((sel && sel.value) || '').trim() === TOPIC_CUSTOM;
-  wrap.hidden = !custom;
+  const raw = String((sel && sel.value) || '').trim();
+  const custom = raw === TOPIC_CUSTOM;
+  const wrap = $('#aTopicCustomWrap');
+  if (wrap) wrap.hidden = !custom;
   if (custom){
     const input = $('#aTopicCustom');
     if (input) setTimeout(() => { try { input.focus(); } catch (e) { /* 桩 DOM 没有真实焦点，忽略 */ } }, 0);
   }
+  const exWrap = $('#aExcerptWrap');
+  if (exWrap){
+    const isExcerpt = TOPIC_EXCERPT.has(raw);
+    exWrap.hidden = !isExcerpt;
+    /* 离开摘抄类分类就把篇目清掉：不然下次打开弹窗还留着上次选的书，
+       正文却可能是自己写的或 AI 给的，比空着更容易误导。 */
+    if (!isExcerpt){
+      const ex = $('#aExcerpt');
+      if (ex) ex.value = '';
+    }
+  }
+}
+
+/* ========== 经典名著节选：内置原文 ==========
+   主题选「经典名著节选」时，光靠 AI 记原文是赌运气：错一个字、拼两段，学的人就学到错的。
+   这里逐字录入 6 段公有领域原文（各句对着 Project Gutenberg 电子版核过），中英成对存 ——
+   程序不猜句界，也不联网取，选好篇目直接填进表单，保存即可。
+   三档各两本：初级《绿野仙踪》《爱丽丝梦游仙境》，中级《福尔摩斯冒险史》《野性的呼唤》，
+   高级《傲慢与偏见》《简·爱》。HTML 里的篇目下拉由 tools/smoke.js 的用例跟这张表对齐。 */
+const EXCERPT_BOOKS = [
+  {
+    id: "oz",
+    title: "The Wonderful Wizard of Oz",
+    titleZh: "绿野仙踪",
+    author: "L. Frank Baum",
+    year: 1900,
+    level: "beginner",
+    note: "第一章《旋风》开篇",
+    lines: [
+      ["Dorothy lived in the midst of the great Kansas prairies, with Uncle Henry, who was a farmer, and Aunt Em, who was the farmer’s wife.", "多萝西住在堪萨斯辽阔的大草原中间，和农民亨利叔叔、以及他的妻子爱姆婶婶住在一起。"],
+      ["Their house was small, for the lumber to build it had to be carried by wagon many miles.", "他们的房子很小，因为盖房子的木料得用马车从好多英里外运来。"],
+      ["There were four walls, a floor and a roof, which made one room; and this room contained a rusty looking cookstove, a cupboard for the dishes, a table, three or four chairs, and the beds.", "四面墙、一块地板、一个屋顶，就成了一间屋子；屋里摆着一个锈迹斑斑的炉灶、一个放碗碟的橱子、一张桌子、三四把椅子和几张床。"],
+      ["Uncle Henry and Aunt Em had a big bed in one corner, and Dorothy a little bed in another corner.", "亨利叔叔和爱姆婶婶在一个角落放了一张大床，多萝西在另一个角落放了一张小床。"],
+      ["There was no garret at all, and no cellar—except a small hole dug in the ground, called a cyclone cellar, where the family could go in case one of those great whirlwinds arose, mighty enough to crush any building in its path.", "房子根本没有阁楼，也没有地窖——只在地上挖了一个小洞，叫旋风地窖，一旦刮起那种能把路上任何房子都压扁的大旋风，一家人就躲进去。"],
+      ["It was reached by a trap door in the middle of the floor, from which a ladder led down into the small, dark hole.", "要进洞得掀开地板中央的一扇活动门，再顺着一架梯子爬进那个又小又黑的洞里。"],
+      ["When Dorothy stood in the doorway and looked around, she could see nothing but the great gray prairie on every side.", "多萝西站在门口四下张望，除了四面无边无际的灰色草原，什么也看不见。"],
+      ["Not a tree nor a house broke the broad sweep of flat country that reached to the edge of the sky in all directions.", "平坦的大地一直铺到天边，四面八方都没有一棵树、一座房子把它隔开。"],
+      ["The sun had baked the plowed land into a gray mass, with little cracks running through it.", "太阳把犁过的地烤成一片灰蒙蒙的土块，上面爬满了细细的裂缝。"],
+      ["Even the grass was not green, for the sun had burned the tops of the long blades until they were the same gray color to be seen everywhere.", "连草都不是绿的：太阳把长叶子的尖都晒焦了，晒成了到处都是的那种灰色。"]
+    ]
+  },
+  {
+    id: "alice",
+    title: "Alice’s Adventures in Wonderland",
+    titleZh: "爱丽丝梦游仙境",
+    author: "Lewis Carroll",
+    year: 1865,
+    level: "beginner",
+    note: "第一章《掉进兔子洞》",
+    lines: [
+      ["In another moment down went Alice after it, never once considering how in the world she was to get out again.", "紧接着，爱丽丝也跟着跳了下去，压根没想过自己到底要怎么再出来。"],
+      ["The rabbit-hole went straight on like a tunnel for some way, and then dipped suddenly down, so suddenly that Alice had not a moment to think about stopping herself before she found herself falling down a very deep well.", "兔子洞先像隧道一样笔直向前延伸了一段，然后突然往下一沉，快得爱丽丝根本来不及想着停下，就发现自己正往一口很深的井里掉。"],
+      ["Either the well was very deep, or she fell very slowly, for she had plenty of time as she went down to look about her and to wonder what was going to happen next.", "也许是这口井太深，也许是她落得太慢，因为她往下掉的时候还有充裕的时间东张西望，想着接下来会发生什么。"],
+      ["First, she tried to look down and make out what she was coming to, but it was too dark to see anything; then she looked at the sides of the well, and noticed that they were filled with cupboards and book-shelves; here and there she saw maps and pictures hung upon pegs.", "她先想低头看看自己会落到什么地方，可下面太黑，什么也看不清；接着她看井壁，发现上面全是碗橱和书架，东一处西一处还挂着钩子吊起的地图和图画。"],
+      ["She took down a jar from one of the shelves as she passed; it was labelled “ORANGE MARMALADE”, but to her great disappointment it was empty: she did not like to drop the jar for fear of killing somebody underneath, so managed to put it into one of the cupboards as she fell past it.", "她往下经过一个架子时从上面取下一个罐子，标签上写着“橘子酱”，可让她大失所望的是罐子是空的；她又不愿把罐子扔下去，怕砸死下面的人，只好在落过那个橱子时把它塞了进去。"],
+      ["“Well!” thought Alice to herself, “after such a fall as this, I shall think nothing of tumbling down stairs!", "“好吧！”爱丽丝心想，“摔过这么一回，以后从楼梯上滚下去我都不当回事了！”"],
+      ["How brave they’ll all think me at home!", "“家里人准会觉得我胆子真大！”"],
+      ["Why, I wouldn’t say anything about it, even if I fell off the top of the house!”", "“哼，就算我从房顶上掉下来，我也一个字都不提！”"]
+    ]
+  },
+  {
+    id: "holmes",
+    title: "The Adventures of Sherlock Holmes",
+    titleZh: "福尔摩斯冒险史",
+    author: "Arthur Conan Doyle",
+    year: 1892,
+    level: "intermediate",
+    note: "《波希米亚丑闻》开篇",
+    lines: [
+      ["To Sherlock Holmes she is always the woman.", "在夏洛克·福尔摩斯心里，她永远是“那位女士”。"],
+      ["I have seldom heard him mention her under any other name.", "我几乎没听他用别的称呼提起过她。"],
+      ["In his eyes she eclipses and predominates the whole of her sex.", "在他眼里，她盖过了女人中的所有人。"],
+      ["It was not that he felt any emotion akin to love for Irene Adler.", "这倒不是因为他队艾琳·艾德勒有过近似爱情的感情。"],
+      ["All emotions, and that one particularly, were abhorrent to his cold, precise but admirably balanced mind.", "一切情感，尤其是这一种，都让他那颗冷静、精确而极为平衡的头脑感到厌恶。"],
+      ["He was, I take it, the most perfect reasoning and observing machine that the world has seen, but as a lover he would have placed himself in a false position.", "依我看，他是世上最完美的推理与观察机器，可要是当情人，他准会把自己摆到一个错误的位置上。"],
+      ["He never spoke of the softer passions, save with a gibe and a sneer.", "他从不谈论那些温柔的感情，一说起来就是冷嘲热讽。"],
+      ["They were admirable things for the observer—excellent for drawing the veil from men’s motives and actions.", "这些感情对观察者来说很可贵——正好用来揭开人们动机与行为上的面纱。"]
+    ]
+  },
+  {
+    id: "call",
+    title: "The Call of the Wild",
+    titleZh: "野性的呼唤",
+    author: "Jack London",
+    year: 1903,
+    level: "intermediate",
+    note: "第一章《进入原始》开篇",
+    lines: [
+      ["Buck did not read the newspapers, or he would have known that trouble was brewing, not alone for himself, but for every tide-water dog, strong of muscle and with warm, long hair, from Puget Sound to San Diego.", "巴克不看报纸，否则它就会知道，麻烦正在酝酿，而且不只是冲着它来，也冲着从皮吉特湾到圣迭戈每一只肌肉结实、长毛暖和的海边狗。"],
+      ["Because men, groping in the Arctic darkness, had found a yellow metal, and because steamship and transportation companies were booming the find, thousands of men were rushing into the Northland.", "因为有人在北极的黑暗里摸索到了一种黄色金属，又因为轮船公司和运输公司在大肆宣扬这个发现，成千上万的人正涌向北方。"],
+      ["These men wanted dogs, and the dogs they wanted were heavy dogs, with strong muscles by which to toil, and furry coats to protect them from the frost.", "这些人需要狗，而且需要的是大块头的狗：肌肉有力能干活，毛皮厚实能御寒。"],
+      ["Buck lived at a big house in the sun-kissed Santa Clara Valley.", "巴克住在阳光充足的圣克拉拉谷一幢大房子里。"],
+      ["Judge Miller’s place, it was called.", "那地方叫米勒法官的庄园。"],
+      ["It stood back from the road, half hidden among the trees, through which glimpses could be caught of the wide cool veranda that ran around its four sides.", "它离大路有一段距离，半掩在树丛里，透过树影能瞥见绕着房子四面的一圈宽阔凉爽的走廊。"],
+      ["The house was approached by gravelled driveways which wound about through wide-spreading lawns and under the interlacing boughs of tall poplars.", "通到房子的碎石车道弯弯曲曲地穿过开阔的草坪，又钻过高大杨树交错的枝叶。"]
+    ]
+  },
+  {
+    id: "pp",
+    title: "Pride and Prejudice",
+    titleZh: "傲慢与偏见",
+    author: "Jane Austen",
+    year: 1813,
+    level: "advanced",
+    note: "第一章开篇",
+    lines: [
+      ["It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife.", "举世公认的一条真理是：一个有钱的单身汉，总少不了要娶位太太。"],
+      ["However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters.", "这样一个人刚搬到一个地方，他的感情和想法别人还一无所知，可这条真理在四邻心里扎得太深，他早已成了这家或那家女儿理所当然的财产。"],
+      ["“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”", "“亲爱的班纳特先生，”有一天他太太对他说，“你听说内瑟菲尔德庄园终于租出去了吗？”"],
+      ["Mr. Bennet replied that he had not.", "班纳特先生回答说没听说。"],
+      ["“But it is,” returned she; “for Mrs. Long has just been here, and she told me all about it.”", "“可它真的租出去了，”她答道，“朗太太刚来过，全都告诉我了。”"],
+      ["Mr. Bennet made no answer.", "班纳特先生没答话。"],
+      ["“Do not you want to know who has taken it?” cried his wife, impatiently.", "“你就不想知道是谁租下的吗？”他太太不耐烦地喊起来。"],
+      ["“You want to tell me, and I have no objection to hearing it.”", "“你想告诉我，我不反对听。”"],
+      ["This was invitation enough.", "有这句话就够她开口了。"]
+    ]
+  },
+  {
+    id: "jane",
+    title: "Jane Eyre",
+    titleZh: "简·爱",
+    author: "Charlotte Brontë",
+    year: 1847,
+    level: "advanced",
+    note: "第一章开篇",
+    lines: [
+      ["There was no possibility of taking a walk that day.", "那天根本不可能出去散步。"],
+      ["We had been wandering, indeed, in the leafless shrubbery an hour in the morning; but since dinner (Mrs. Reed, when there was no company, dined early) the cold winter wind had brought with it clouds so sombre, and a rain so penetrating, that further outdoor exercise was now out of the question.", "那天上午我们其实已经在光秃秃的灌木丛里走了一个钟头；可吃过午饭之后（没有客人时，里德太太很早就吃午饭），冬天的冷风带来了那么阴沉的云和那么透骨的雨，再出去活动已经不可能了。"],
+      ["I was glad of it: I never liked long walks, especially on chilly afternoons: dreadful to me was the coming home in the raw twilight, with nipped fingers and toes, and a heart saddened by the chidings of Bessie, the nurse, and humbled by the consciousness of my physical inferiority to Eliza, John, and Georgiana Reed.", "我为此高兴：我从不喜欢走长路，尤其是在阴冷的下午；最难受的是在湿冷的暮色里回家，手指脚趾冻得发疼，心被保姆贝茜的斥责弄得发苦，又因为意识到自己身体不如伊丽莎、约翰和乔治亚娜·里德而抬不起头。"],
+      ["The said Eliza, John, and Georgiana were now clustered round their mama in the drawing-room: she lay reclined on a sofa by the fireside, and with her darlings about her (for the time neither quarrelling nor crying) looked perfectly happy.", "前面说的伊丽莎、约翰和乔治亚娜这会儿正围在客厅里他们的妈妈身边：她斜靠在炉边的沙发上，有这些宝贝围着（这会儿既没吵架也没哭闹），看上去心满意足。"],
+      ["Me, she had dispensed from joining the group; saying, “She regretted to be under the necessity of keeping me at a distance; but that until she heard from Bessie, and could discover by her own observation, that I was endeavouring in good earnest to acquire a more sociable and childlike disposition, a more attractive and sprightly manner—something lighter, franker, more natural, as it were—she really must exclude me from privileges intended only for contented, happy, little children.”", "她却免了我跟大家凑在一起的资格，说“她很遗憾不得不跟我保持距离；但在她听贝茜讲过、并自己观察出我在认真努力养成更合群、更像孩子的性情，举止更讨人喜欢、更活泼——总之更轻松、更坦白、更自然——之前，她实在只好把我排除在那些专给心满意足、快活的小孩的待遇之外。”"],
+      ["“What does Bessie say I have done?” I asked.", "“贝茜说我做了什么了？”我问。"],
+      ["“Jane, I don’t like cavillers or questioners; besides, there is something truly forbidding in a child taking up her elders in that manner.", "“简，我不喜欢挑三拣四、爱顶嘴的人；再说，小孩子那样跟长辈说话，确实让人看不下去。”"],
+      ["Be seated somewhere; and until you can speak pleasantly, remain silent.”", "“找个地方坐下；在你能好好说话之前，就闭着嘴。”"]
+    ]
+  }
+];
+const EXCERPT_BY_ID = new Map(EXCERPT_BOOKS.map(b => [b.id, b]));
+
+/* 当前选的是哪一本（没选或值不认识 → null）。选篇目不改主题：
+   主题仍是「经典名著节选」，篇目只决定直接填哪一段原文。 */
+function excerptBook(){
+  const sel = $('#aExcerpt');
+  return EXCERPT_BY_ID.get(String((sel && sel.value) || '').trim()) || null;
+}
+
+/* 选好书就把原文、译文、书名、难度、句数一次填进表单。
+   不经过 AI，谁也没法把原文改写掉一个字。 */
+function applyExcerpt(){
+  const book = excerptBook();
+  if (!book) return null;
+  const set = (sel, v) => { const el = $(sel); if (el) el.value = v; };
+  set('#aTitle', book.title);
+  set('#aTitleZh', book.titleZh + '（' + book.author + '）');
+  set('#aLevel', book.level);
+  set('#aSentCount', String(book.lines.length));
+  set('#aText', book.lines.map(l => l[0]).join('\n'));
+  set('#aTextZh', book.lines.map(l => l[1]).join('\n'));
+  refreshAiPrompt();
+  toast('已填入《' + book.titleZh + '》原文 ' + book.lines.length + ' 句，点保存即可');
+  return book;
 }
 
 /* ========== 「让 AI 写一篇」提示词 ==========
@@ -5097,8 +5289,9 @@ function bindPromptPanel(){
     el.addEventListener('change', refreshAiPrompt);
   });
   /* 选到「自定义…」才显出输入框；换回分类时把输入框收起（值留着，切回去还在） */
-  bind('#aTopic', 'change', syncTopicCustom);
-  syncTopicCustom();
+  bind('#aTopic', 'change', syncTopicExtra);
+  bind('#aExcerpt', 'change', applyExcerpt);
+  syncTopicExtra();
 
   /* 逐句翻译 */
   bind('#btnAutoTranslate', 'click', async () => {

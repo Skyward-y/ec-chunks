@@ -615,6 +615,109 @@ test('摘抄类分类：要的是名著原文，不是仿写；词块那段也�
   assert.ok(q.length < 1500, '摘抄版说明更长，也不能撑爆，现在 ' + q.length);
 });
 
+console.log('内置名著节选');
+
+test('名著篇目下拉跟内置书单对得上，三档各两本', () => {
+  const html = fs.readFileSync(HTML, 'utf8');
+  const start = html.indexOf('<select id="aExcerpt">');
+  assert.ok(start > 0, 'HTML 里要有篇目下拉');
+  const box = html.slice(start, html.indexOf('</select>', start));
+  const ids = [...box.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]).filter(Boolean);
+  const books = Array.from(app.run('EXCERPT_BOOKS.map(b => b.id)'));
+  assert.deepStrictEqual(ids, books, 'HTML 里的篇目要和表一一对应，顺序也一样');
+  assert.strictEqual(new Set(ids).size, ids.length, '篇目 id 不能重复');
+  const levelOf = { 初级: 'beginner', 中级: 'intermediate', 高级: 'advanced' };
+  const chunks = box.split(/<optgroup label="/).slice(1);
+  assert.strictEqual(chunks.length, 3, '要按三档分组');
+  chunks.forEach((chunk) => {
+    const label = chunk.slice(0, chunk.indexOf('"'));
+    assert.ok(levelOf[label], '不认识的档位：' + label);
+    const got = [...chunk.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+    const want = Array.from(app.run(`EXCERPT_BOOKS.filter(b => b.level === '${levelOf[label]}').map(b => b.id)`));
+    assert.deepStrictEqual(got, want, label + '那组要对得上');
+    assert.ok(want.length >= 2, label + '至少两本，用户才有得挑');
+  });
+});
+
+test('每段名著：中英逐句对齐，拷进表单再切一遍还是那些句子', () => {
+  const books = app.run('EXCERPT_BOOKS');
+  assert.ok(books.length >= 6, '至少六本，现在 ' + books.length);
+  books.forEach((b) => {
+    assert.ok(b.title && b.titleZh && b.author && b.year >= 1800, b.id + ' 缺书名/译名/作者/年份');
+    assert.ok(
+      b.lines.length >= 4 && b.lines.length <= 30,
+      b.id + ' 的句数要在表单允许的 4–30 之间，现在 ' + b.lines.length
+    );
+    b.lines.forEach((l, i) => {
+      const at = b.id + ' 第 ' + (i + 1) + ' 句';
+      assert.ok(typeof l[0] === 'string' && l[0].trim(), at + ' 英文是空的');
+      assert.ok(typeof l[1] === 'string' && l[1].trim(), at + ' 没有译文');
+      assert.ok(!/[\r\n]/.test(l[0]) && !/[\r\n]/.test(l[1]), at + ' 里有换行，填进表单会被拆成两条');
+    });
+  });
+  /* 填进表单是每句一行，保存时还会按 . ! ? 重切一遍：切回来必须逐句相同，否则中文会整段错位 */
+  const drifted = Array.from(
+    app.run(`EXCERPT_BOOKS.filter(b => {
+    const again = splitEnglishSentences(b.lines.map(l => l[0]).join(' '));
+    return again.length !== b.lines.length || again.some((s, i) => s !== b.lines[i][0]);
+  }).map(b => b.id)`)
+  );
+  assert.deepStrictEqual(drifted, [], '这些书的句子切不回来：' + drifted.join('、'));
+});
+
+test('选了篇目，书名/原文/译文/难度/句数一次填好，不经过 AI', () => {
+  const topic = makeEl();
+  topic.value = '经典名著节选';
+  const els = {
+    aTopic: topic,
+    aExcerpt: makeEl(),
+    aTitle: makeEl(),
+    aTitleZh: makeEl(),
+    aLevel: makeEl(),
+    aSentCount: makeEl(),
+    aText: makeEl(),
+    aTextZh: makeEl()
+  };
+  els.aExcerpt.value = 'jane';
+  const a = loadApp({ els });
+  const want = a.run(`(() => {
+    const b = EXCERPT_BY_ID.get('jane');
+    return { title: b.title, titleZh: b.titleZh, author: b.author, level: b.level,
+             n: String(b.lines.length),
+             en: b.lines.map(l => l[0]).join('\\n'),
+             zh: b.lines.map(l => l[1]).join('\\n') };
+  })()`);
+  a.run('applyExcerpt()');
+  assert.strictEqual(els.aTitle.value, want.title, '英文标题填书名');
+  assert.ok(
+    els.aTitleZh.value.indexOf(want.titleZh) === 0 && els.aTitleZh.value.indexOf(want.author) > 0,
+    '中文标题填译名并带上作者：' + els.aTitleZh.value
+  );
+  assert.strictEqual(els.aLevel.value, want.level, '难度跟着书走');
+  assert.strictEqual(els.aSentCount.value, want.n, '句数跟着这段原文走');
+  assert.strictEqual(els.aText.value, want.en, '英文原文要一字不差');
+  assert.strictEqual(els.aTextZh.value, want.zh, '中文译文要逐句对上');
+  assert.strictEqual(els.aText.value.split('\n').length, els.aTextZh.value.split('\n').length, '中英行数相等');
+});
+
+test('只有摘抄类分类才露出篇目下拉，换个分类就收起并清空篇目', () => {
+  const sel = makeEl();
+  const exWrap = makeEl();
+  const ex = makeEl();
+  const customWrap = makeEl();
+  sel.value = '经典名著节选';
+  ex.value = 'pp';
+  const a = loadApp({ els: { aTopic: sel, aExcerpt: ex, aExcerptWrap: exWrap, aTopicCustomWrap: customWrap } });
+  a.run('syncTopicExtra()');
+  assert.strictEqual(exWrap.hidden, false, '经典名著节选时要露出来');
+  assert.strictEqual(ex.value, 'pp', '还留着这个分类时不能把用户选的篇目清掉');
+  assert.strictEqual(customWrap.hidden, true, '自定义输入框这时要藏着');
+  sel.value = '科普';
+  a.run('syncTopicExtra()');
+  assert.strictEqual(exWrap.hidden, true, '别的分类要把篇目收起来');
+  assert.strictEqual(ex.value, '', '收起来的同时清掉篇目，免得正文和书名对不上');
+});
+
 test('自定义主题：用用户原话，且不硬塞一段无关的专属要求', () => {
   const sel = makeEl();
   sel.value = '__custom__';

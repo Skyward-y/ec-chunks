@@ -582,6 +582,21 @@ mark.hl-zh{background:var(--soft);color:var(--brand-2);border-radius:4px;padding
         <label style="flex:0 0 96px;">句数<input id="aSentCount" type="number" min="4" max="30" step="1" value="10"></label>
       </div>
       <label id="aTopicCustomWrap" hidden>自定义主题<input id="aTopicCustom" placeholder="例如：和邻居的一次小摩擦"></label>
+      <label id="aExcerptWrap" hidden>名著篇目<select id="aExcerpt">
+        <option value="">— 选一本，原文与译文直接填进下面 —</option>
+        <optgroup label="初级">
+          <option value="oz">绿野仙踪 The Wonderful Wizard of Oz（L. Frank Baum, 1900）</option>
+          <option value="alice">爱丽丝梦游仙境 Alice’s Adventures in Wonderland（Lewis Carroll, 1865）</option>
+        </optgroup>
+        <optgroup label="中级">
+          <option value="holmes">福尔摩斯冒险史 The Adventures of Sherlock Holmes（Arthur Conan Doyle, 1892）</option>
+          <option value="call">野性的呼唤 The Call of the Wild（Jack London, 1903）</option>
+        </optgroup>
+        <optgroup label="高级">
+          <option value="pp">傲慢与偏见 Pride and Prejudice（Jane Austen, 1813）</option>
+          <option value="jane">简·爱 Jane Eyre（Charlotte Brontë, 1847）</option>
+        </optgroup>
+      </select></label>
       <div class="ai-prompt">
         <p class="note" style="margin:0 0 8px;">不知道写什么好？把下面这段提示词复制给任意 AI（ChatGPT／Claude／豆包…），它会按你选的等级、主题、句数写一篇，连中文逐句翻译和重点词块一起给你；把整段回答粘到下面的「从 AI 的回答里自动分段」，标题、英文、中文会自动分开填好。</p>
         <textarea id="aPrompt" rows="8" readonly spellcheck="false"></textarea>
